@@ -16,7 +16,14 @@ uniform vec4 tint2 : source_color = vec4(0.62, 0.52, 0.34, 1.0);
 uniform vec4 tint3 : source_color = vec4(0.34, 0.50, 0.22, 1.0);
 uniform vec4 tint_cliff : source_color = vec4(0.45, 0.40, 0.36, 1.0);
 uniform float tiles_per_meter = 0.25;  // 1 / velikost dlaždice v metrech (4 m => 0.25)
+uniform vec4 tiles = vec4(0.25);       // dlaždice na metr pro vrstvy G0..G3 (návrhář map je nastavuje)
 uniform bool pixel_filter = false;     // true = pixel-art textura (ostré texely, bez vyhlazení)
+
+group_uniforms splat;
+uniform sampler2D splat_tex : filter_linear, repeat_disable;  // váhy vrstev z návrháře map (RGBA = G0..G3)
+uniform bool use_splat = false;
+uniform vec2 map_origin = vec2(-16.0, -14.0);
+uniform vec2 map_size = vec2(32.0, 28.0);
 
 group_uniforms blending;
 uniform float edge_softness : hint_range(0.01, 0.5) = 0.28;
@@ -61,21 +68,25 @@ void vertex() {
 }
 
 void fragment() {
-	vec2 uv = wpos.xz * tiles_per_meter;
 	float n = fbm(wpos.xz * edge_noise_scale);
 
 	// měkké váhy: vyhlazené vertex váhy + šum + smoothstep
-	vec4 w = clamp(COLOR, 0.0, 1.0) + (n - 0.5) * edge_noise;
+	vec4 raw = COLOR;
+	if (use_splat) {
+		vec2 ts = vec2(textureSize(splat_tex, 0));
+		raw = texture(splat_tex, ((wpos.xz - map_origin) / map_size * (ts - 1.0) + 0.5) / ts);
+	}
+	vec4 w = clamp(raw, 0.0, 1.0) + (n - 0.5) * edge_noise;
 	w = smoothstep(vec4(0.5 - edge_softness), vec4(0.5 + edge_softness), w);
 	float sum = w.r + w.g + w.b + w.a;
 	float cliff_w = clamp(1.0 - sum, 0.0, 1.0);
 	float slope = 1.0 - clamp(wnrm.y, 0.0, 1.0);
 	cliff_w = max(cliff_w, smoothstep(slope_cliff_start, slope_cliff_end, slope));
 
-	vec3 c = samp(tex0, uv) * tint0.rgb * w.r
-		+ samp(tex1, uv * 1.13) * tint1.rgb * w.g
-		+ samp(tex2, uv * 0.93) * tint2.rgb * w.b
-		+ samp(tex3, uv * 1.21) * tint3.rgb * w.a;
+	vec3 c = samp(tex0, wpos.xz * tiles.x) * tint0.rgb * w.r
+		+ samp(tex1, wpos.xz * tiles.y * 1.13) * tint1.rgb * w.g
+		+ samp(tex2, wpos.xz * tiles.z * 0.93) * tint2.rgb * w.b
+		+ samp(tex3, wpos.xz * tiles.w * 1.21) * tint3.rgb * w.a;
 	c /= max(sum, 0.001);
 
 	// útes: dvě roviny podle normály (bez natažení textury na svahu)

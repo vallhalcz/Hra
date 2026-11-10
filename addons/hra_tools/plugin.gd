@@ -407,7 +407,7 @@ func _import_zips() -> void:
 			_say("Nelze otevřít " + f)
 			continue
 		for path in z.get_files():
-			if not path.begins_with("characters/") or path.ends_with("/") or ".." in path or path.ends_with("_editor.json"):
+			if not (path.begins_with("characters/") or path.begins_with("maps/")) or path.ends_with("/") or ".." in path or path.ends_with("_editor.json"):
 				continue
 			var dst := "res://" + path
 			DirAccess.make_dir_recursive_absolute(dst.get_base_dir())
@@ -415,10 +415,10 @@ func _import_zips() -> void:
 			if fa:
 				fa.store_buffer(z.read_file(path))
 				fa.close()
-			if path.ends_with("character.json"):
+			if path.ends_with("character.json") or path.ends_with("map.json"):
 				chars.append(path.get_base_dir().get_file())
 		z.close()
 		DirAccess.rename_absolute("res://incoming/" + f, "res://incoming/" + f + ".done")
-	_say("Naimportované postavy: " + ", ".join(chars))
+	_say("Naimportováno: " + ", ".join(chars))
 	EditorInterface.get_resource_filesystem().scan()
 	_importing = false

@@ -125,4 +125,23 @@ ol li,ul li{margin:3pt 0}.sub{color:#666;margin-bottom:16pt}
 <tr><td>Štětec nemaluje</td><td>Musí být vybraná vrstva detailů, zapnutý „Štětec aktivní“ a scéna musí obsahovat <code>Terrain</code>.</td></tr>
 <tr><td>Chyby v konzoli</td><td>Zkopíruj je a pošli – opravíme.</td></tr>
 </table>
+
+<h2>10. Návrhář map (nejjednodušší cesta, bez Blenderu)</h2>
+<p>Soubor <code>tools/map_designer.html</code> otevři v prohlížeči (funguje offline). Mapu vidíš shora a rovnou s texturami. Blender pak potřebuješ jen na modely (stromy, domy…).</p>
+<h3>Postup</h3>
+<ol>
+<li><b>Nahoře</b> nastav ID mapy (např. <code>uvod</code>), velikost v metrech a detail mřížky (2/m běžný).</li>
+<li><b>Záložka Generátor</b> → <b>Vygenerovat</b>: vytvoří kopce, skvrny trávy a cestu. Nebo <b>Rovná louka</b> a maluj sám.</li>
+<li><b>Záložka Textury</b>: k vrstvě přetáhni obrázek (klik nebo drag &amp; drop). Nastav velikost dlaždice v metrech a odstín. Změna je vidět hned.</li>
+<li><b>Vlevo vyber štětec</b> a maluj: vrstvy (G0–G3, útes), výška (zvednout, snížit, vyhladit, srovnat). Strmé svahy se samy změní na skálu.</li>
+<li><b>Detaily</b>: vyber typ (grass, flowers, stone…) a maluj nebo je rozsyp po vrstvě (Generátor → Rozsypat detaily). Shift = guma.</li>
+<li><b>Objekty</b>: Spawn (povinný <code>start</code>), Exit (cílová mapa + spawn), Postava / Nepřítel (ID z tvůrce postav), Kolize (neviditelný box), Model (soubor z <code>assets/props/</code>). Přesouvání nástrojem Vybrat.</li>
+<li><b>Světlo</b>: sklon a barva slunce, okolní světlo, obloha; předvolby Den / Večer / Noc.</li>
+<li><b>Export</b>: tlačítko vpravo nahoře → ZIP. Kontrola upozorní na chyby (chybí spawn…).</li>
+</ol>
+<h3>Do hry</h3>
+<p>ZIP pošli mi, nebo ho hoď do složky <code>incoming/</code> v Godot projektu (plugin ho sám rozbalí do <code>res://maps/&lt;id&gt;/</code>). Hra mapu postaví sama při vstupu; žádný import Blenderu není potřeba. Mapu lze kdykoli načíst zpět tlačítkem <b>Načíst ZIP</b> a upravovat.</p>
+<div class="box"><b>Pozor:</b> náhled v návrháři je hrubší než ve hře. V Godotu se hranice vrstev navíc rozmažou šumem a doplní se makro variace barvy, takže přechody budou měkčí.</div>
+<h3>Modely z Blenderu</h3>
+<p>Exportuj <code>.glb</code> do <code>assets/props/jmeno.glb</code>. V návrháři přidej objekt Model a do pole napiš <code>jmeno</code>. Zapnutá „Kolize“ vytvoří kolizi z modelu.</p>
 </html>

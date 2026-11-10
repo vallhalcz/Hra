@@ -33,5 +33,10 @@ Malé 3D scény z Blenderu + 2D billboard sprity, pevná kamera, rychlé přecho
 
 Podrobný návod: `docs/NAVOD.pdf`
 
+## Návrhář map a tvůrce postav (HTML, offline)
+- `tools/map_designer.html` – malování terénu/výšek/textur/detailů, objekty, světlo → ZIP
+- `tools/character_creator.html` – postavy, animace, role → ZIP
+- ZIP hoď do `incoming/`, plugin ho rozbalí (`maps/<id>/`, `characters/<id>/`).
+
 ## Blender doplněk
 `tools/blender/hra_map_tools.py` → Edit › Preferences › Add-ons › Install… Panel **Hra** (klávesa N): materiály G0–G3, přejmenování výběru (Terrain/SOLID/COL), scatter plochy, spawn, exit a export GLB rovnou do `assets/maps/`.

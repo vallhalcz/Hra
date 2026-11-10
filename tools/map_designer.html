@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hra – Návrhář map</title>
+<style>
+:root{--bg:#15171c;--panel:#1e2128;--p2:#272b34;--line:#343a46;--tx:#e8eaee;--mut:#9aa3b2;--acc:#7ccf5a;--acc2:#3f8f2a;--err:#ef6a6a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:13px/1.4 system-ui,Segoe UI,Arial,sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+header{display:flex;gap:10px;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:15px;margin:0 8px 0 0;color:var(--acc)}
+button,.btn{background:var(--p2);color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:5px 10px;font:inherit;cursor:pointer}
+button:hover,.btn:hover{border-color:var(--acc)}button.on{background:var(--acc2);border-color:var(--acc)}button.pri{background:var(--acc2);border-color:var(--acc)}button.sm{padding:2px 7px;font-size:12px}
+input[type=text],input[type=number],select{background:#12141a;color:var(--tx);border:1px solid var(--line);border-radius:5px;padding:4px 6px;font:inherit;width:100%}
+input[type=range]{width:100%}input[type=color]{width:36px;height:26px;padding:0;border:1px solid var(--line);background:none}
+label.f{display:flex;flex-direction:column;gap:2px;color:var(--mut);font-size:11px;margin-bottom:6px}label.ck{display:flex;gap:6px;align-items:center;margin:4px 0}
+#wrap{flex:1;display:grid;grid-template-columns:200px 1fr 300px;min-height:0}
+#tools,#side{background:var(--panel);overflow:auto;padding:10px}#tools{border-right:1px solid var(--line)}#side{border-left:1px solid var(--line)}
+h3{margin:12px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}h3:first-child{margin-top:0}
+.tb{display:grid;grid-template-columns:1fr 1fr;gap:5px}.tb button{text-align:left;padding:6px 8px}.tb button.w{grid-column:1/-1}
+.sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid #0006}
+#cv{width:100%;height:100%;display:block;cursor:crosshair;background:#0e1014}
+.card{background:var(--p2);border:1px solid var(--line);border-radius:8px;padding:9px;margin-bottom:9px}
+.lay{display:grid;grid-template-columns:64px 1fr;gap:9px}.thumb{width:64px;height:64px;border-radius:6px;background:#0006 center/cover;border:2px dashed var(--line);display:flex;align-items:center;justify-content:center;text-align:center;font-size:10px;color:var(--mut);cursor:pointer;image-rendering:pixelated}
+.thumb.has{border-style:solid;border-color:var(--acc2)}.row{display:flex;gap:6px;align-items:center}.row>*{flex:1}.row>button{flex:none}
+.msg{padding:5px 8px;border-radius:5px;margin:3px 0;font-size:12px}.msg.e{background:#ef6a6a22;color:var(--err)}.msg.w{background:#f0b43c22;color:#f0b43c}.msg.o{background:#7ccf5a22;color:var(--acc)}
+.hint{color:var(--mut);font-size:11px}.tabs{display:flex;gap:4px;margin-bottom:10px}.tabs button{flex:1}
+#stat{position:absolute;left:210px;bottom:6px;background:#000a;padding:3px 8px;border-radius:5px;font-size:11px;pointer-events:none}
+</style></head><body>
+<header><h1>🗺 Návrhář map</h1>
+<label class="f" style="margin:0;width:110px">ID mapy<input type="text" id="mId"></label>
+<label class="f" style="margin:0;width:150px">Název<input type="text" id="mName"></label>
+<label class="f" style="margin:0;width:70px">Šířka (m)<input type="number" id="mW" min="8" max="128"></label>
+<label class="f" style="margin:0;width:70px">Hloubka (m)<input type="number" id="mD" min="8" max="128"></label>
+<label class="f" style="margin:0;width:80px">Detail mřížky<select id="mCpm"><option value="1">1/m (hrubý)</option><option value="2">2/m (běžný)</option><option value="4">4/m (jemný)</option></select></label>
+<span style="flex:1"></span>
+<label class="btn">Načíst ZIP<input type="file" id="fZip" accept=".zip" hidden></label><button class="pri" id="bExp">Exportovat mapu (ZIP)</button></header>
+<div id="wrap">
+<div id="tools"></div>
+<div style="position:relative;min-width:0"><canvas id="cv"></canvas><div id="stat"></div></div>
+<div id="side"></div></div>
+<script>
+'use strict';
+const LAYERS=[['G0 · Tráva','#6b9e3d'],['G1 · Světlá tráva','#8cb64f'],['G2 · Hlína / cesta','#a08a5c'],['G3 · Tmavá tráva','#4f7a35'],['Útes / skála','#756a5e']];
+const $=s=>document.querySelector(s);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const slug=s=>String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'mapa';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// ---------- model ----------
+let M,gw,gh,TX=[];
+function newMap(){return{version:1,id:'uvod',name:'Palouček',w:32,d:28,cpm:2,max_h:6,
+ layers:LAYERS.map(([n,c])=>({name:n,tint:c,tile:4,pixel:false,tex:''})),
+ light:{sun_yaw:-35,sun_pitch:-50,sun_color:'#fff1d6',sun_energy:1.0,amb_color:'#a8b4cc',amb_energy:0.6,sky:'#8cb8e6'},
+ objects:[{t:'spawn',id:'start',x:16,z:20}],detail_types:['grass','flowers','stone'],details:{},height:null,splat:null}}
+function alloc(keep){const w=M.w*M.cpm+1,h=M.d*M.cpm+1;
+  const H=new Float32Array(w*h),S=new Uint8Array(w*h*4);
+  for(let i=0;i<w*h;i++)S[i*4]=255;
+  if(keep&&M.height){const ow=gw,oh=gh;for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const u=x/(w-1)*(ow-1),v=y/(h-1)*(oh-1),x0=Math.min(ow-2,Math.floor(u)),y0=Math.min(oh-2,Math.floor(v)),fx=u-x0,fy=v-y0;
+    const g=(a,b,c)=>M.height[(y0+b)*ow+x0+a];H[y*w+x]=(g(0,0)*(1-fx)+g(1,0)*fx)*(1-fy)+(g(0,1)*(1-fx)+g(1,1)*fx)*fy;
+    for(let c=0;c<4;c++){const s=(a,b)=>M.splat[((y0+b)*ow+x0+a)*4+c];S[(y*w+x)*4+c]=(s(0,0)*(1-fx)+s(1,0)*fx)*(1-fy)+(s(0,1)*(1-fx)+s(1,1)*fx)*fy}}}
+  gw=w;gh=h;M.height=H;M.splat=S;dirtyAll()}
+// ---------- textury ----------
+function loadTex(i){const L=M.layers[i];TX[i]=null;if(!L.tex)return;const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.width;c.height=im.height;const g=c.getContext('2d');g.drawImage(im,0,0);TX[i]={w:im.width,h:im.height,d:g.getImageData(0,0,im.width,im.height).data};dirtyAll()};im.src=L.tex}
+// ---------- náhled (software render) ----------
+const PV=document.createElement('canvas');let pvImg,pvDirty=true,PX=16;
+function dirtyAll(){pvDirty=true}
+const sstep=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
+function renderPreview(){
+  PX=Math.min(16,Math.floor(900/Math.max(M.w,M.d)));const W=M.w*PX,D=M.d*PX;
+  if(PV.width!==W||PV.height!==D){PV.width=W;PV.height=D;pvImg=PV.getContext('2d').createImageData(W,D)}
+  const out=pvImg.data,rgb=M.layers.map(l=>[parseInt(l.tint.slice(1,3),16),parseInt(l.tint.slice(3,5),16),parseInt(l.tint.slice(5,7),16)]);
+  const ly=-M.light.sun_yaw*Math.PI/180,lp=-M.light.sun_pitch*Math.PI/180;const L=[Math.sin(ly)*Math.cos(lp),Math.sin(lp),Math.cos(ly)*Math.cos(lp)];
+  const cpm=M.cpm,hs=M.max_h;
+  const hv=(x,y)=>M.height[clamp(y,0,gh-1)*gw+clamp(x,0,gw-1)];
+  for(let py=0;py<D;py++){const v=py/PX*cpm,y0=Math.min(gh-2,Math.floor(v)),fy=v-y0;
+   for(let px=0;px<W;px++){const u=px/PX*cpm,x0=Math.min(gw-2,Math.floor(u)),fx=u-x0;
+    const i00=(y0*gw+x0)*4,i10=i00+4,i01=i00+gw*4,i11=i01+4,w=[0,0,0,0];
+    for(let c=0;c<4;c++){w[c]=((M.splat[i00+c]*(1-fx)+M.splat[i10+c]*fx)*(1-fy)+(M.splat[i01+c]*(1-fx)+M.splat[i11+c]*fx)*fy)/255;w[c]=sstep(.25,.75,w[c])}
+    const sum=w[0]+w[1]+w[2]+w[3];
+    // sklon
+    const hx=(hv(x0+1,y0)-hv(x0,y0))*hs*cpm,hz=(hv(x0,y0+1)-hv(x0,y0))*hs*cpm;
+    const nl=Math.hypot(hx,1,hz),nx=-hx/nl,ny=1/nl,nz=-hz/nl;
+    const cl=Math.max(clamp(1-sum,0,1),sstep(.35,.6,1-ny));
+    let r=0,g=0,b=0;const wu=px/PX,wv=py/PX;
+    for(let c=0;c<4;c++){if(w[c]<=0.001)continue;const t=texS(c,wu,wv,rgb[c]);r+=t[0]*w[c];g+=t[1]*w[c];b+=t[2]*w[c]}
+    const s=Math.max(sum,.001);r/=s;g/=s;b/=s;
+    if(cl>0.001){const t=texS(4,wu,wv,rgb[4]);r=r*(1-cl)+t[0]*cl;g=g*(1-cl)+t[1]*cl;b=b*(1-cl)+t[2]*cl}
+    const sh=clamp(.55+.6*Math.max(0,nx*L[0]+ny*L[1]+nz*L[2]),.35,1.25);
+    const o=(py*W+px)*4;out[o]=r*sh;out[o+1]=g*sh;out[o+2]=b*sh;out[o+3]=255}}
+  PV.getContext('2d').putImageData(pvImg,0,0);pvDirty=false}
+function texS(i,u,v,tint){const t=TX[i],L=M.layers[i];if(!t)return tint;
+  let tx=Math.floor(((u/L.tile)%1+1)%1*t.w),ty=Math.floor(((v/L.tile)%1+1)%1*t.h);const o=(ty*t.w+tx)*4;
+  return[t.d[o]*tint[0]/255,t.d[o+1]*tint[1]/255,t.d[o+2]*tint[2]/255]}
+// ---------- stav UI ----------
+let tool={k:'layer',i:0},brush=2,strength=.5,sel=null,view={s:14,ox:20,oy:20},detType='grass',tab='tex',showGrid=true,flatH=0;
+const cv=$('#cv'),ctx=cv.getContext('2d');
+function resizeCv(){const r=cv.parentElement.getBoundingClientRect();cv.width=r.width;cv.height=r.height;draw()}addEventListener('resize',resizeCv);
+function fit(){const r=cv.parentElement.getBoundingClientRect();view.s=Math.min((r.width-40)/M.w,(r.height-40)/M.d);view.ox=(r.width-M.w*view.s)/2;view.oy=(r.height-M.d*view.s)/2}
+const OBJ={spawn:['⚑','Spawn','#7ccf5a'],exit:['⇥','Exit','#f0b43c'],npc:['☺','Postava','#5ab0ff'],enemy:['☠','Nepřítel','#ef6a6a'],box:['▭','Kolize','#b0b0b0'],model:['▣','Model','#c88cff']};
+function tools(){const T=$('#tools');
+ T.innerHTML=`<h3>Terén – vrstva</h3><div class="tb">${M.layers.map((l,i)=>`<button data-tl="layer" data-i="${i}" class="w ${tool.k==='layer'&&tool.i===i?'on':''}"><span class="sw" style="background:${l.tint}"></span>${esc(l.name)}</button>`).join('')}</div>
+ <h3>Terén – výška</h3><div class="tb">${[['raise','⬆ Zvednout'],['lower','⬇ Snížit'],['smooth','≈ Vyhladit'],['flat','▬ Srovnat']].map(([k,t])=>`<button data-tl="${k}" class="${tool.k===k?'on':''}">${t}</button>`).join('')}</div>
+ <h3>Detaily</h3><select id="dt">${M.detail_types.map(t=>`<option ${t===detType?'selected':''}>${esc(t)}</option>`).join('')}</select>
+ <div class="tb" style="margin-top:5px"><button data-tl="detail" class="${tool.k==='detail'&&!tool.erase?'on':''}">✿ Malovat</button><button data-tl="detailx" class="${tool.k==='detail'&&tool.erase?'on':''}">✕ Guma</button><button class="sm w" id="addDt">+ nový typ</button></div>
+ <h3>Objekty</h3><div class="tb">${Object.entries(OBJ).map(([k,[ic,n]])=>`<button data-tl="obj" data-i="${k}" class="${tool.k==='obj'&&tool.i===k?'on':''}">${ic} ${n}</button>`).join('')}<button data-tl="select" class="w ${tool.k==='select'?'on':''}">☝ Vybrat / posunout</button></div>
+ <h3>Štětec</h3><label class="f">Velikost <b id="bv">${brush.toFixed(1)} m</b><input type="range" id="br" min=".5" max="10" step=".1" value="${brush}"></label>
+ <label class="f">Síla<input type="range" id="st" min=".05" max="1" step=".05" value="${strength}"></label>
+ <label class="ck"><input type="checkbox" id="gr" ${showGrid?'checked':''}> Mřížka 1 m</label><p class="hint">Kolečko = zoom · pravé/prostřední tl. = posun · Shift u detailů = guma · Del = smazat objekt</p>`;
+ T.querySelectorAll('[data-tl]').forEach(b=>b.onclick=()=>{const k=b.dataset.tl;tool={k,i:k==='layer'?+b.dataset.i:b.dataset.i};if(k==='detailx')tool={k:'detail',erase:true};if(k==='detail')tool={k:'detail'};if(k!=='select')sel=null;tools();side()});
+ $('#dt').onchange=e=>detType=e.target.value;$('#addDt').onclick=()=>{const n=slug(prompt('Název typu detailu (stejný jako soubor data/scatter/<typ>.tres):','')||'');if(n&&!M.detail_types.includes(n)){M.detail_types.push(n);detType=n;tools()}};
+ $('#br').oninput=e=>{brush=+e.target.value;$('#bv').textContent=brush.toFixed(1)+' m'};$('#st').oninput=e=>strength=+e.target.value;$('#gr').onchange=e=>{showGrid=e.target.checked;draw()}}
+function side(){const S=$('#side');
+ const tabs=[['tex','Textury'],['gen','Generátor'],['map','Světlo'],['obj','Objekt'],['chk','Export']];
+ let h=`<div class="tabs">${tabs.map(([k,t])=>`<button data-tab="${k}" class="sm ${tab===k?'on':''}">${t}</button>`).join('')}</div>`;
+ if(tab==='tex')h+=M.layers.map((l,i)=>`<div class="card"><div class="lay"><div class="thumb ${l.tex?'has':''}" data-up="${i}" style="${l.tex?`background-image:url(${l.tex})`:''}">${l.tex?'':'klik nebo přetáhni texturu'}</div><div>
+  <b>${esc(l.name)}</b><div class="row"><label class="f" style="margin:0">Dlaždice (m)<input type="number" step=".25" min=".25" data-lk="${i}.tile" value="${l.tile}"></label><label class="f" style="margin:0">Odstín<input type="color" data-lk="${i}.tint" value="${l.tint}"></label></div>
+  <label class="ck"><input type="checkbox" data-lk="${i}.pixel" ${l.pixel?'checked':''}>Pixel-art</label>${l.tex?`<button class="sm" data-rm="${i}">odebrat texturu</button>`:''}</div></div></div>`).join('')+`<p class="hint">Doporučeno: bezešvá textura 512×512 (1 dlaždice = 4 m). Pixel-art: 64×64 = 1 m. Bez textury se použije jen odstín.</p>`;
+ if(tab==='gen')h+=`<div class="card"><b>Generátor terénu</b><label class="f">Seed<input type="number" id="gSeed" value="${gen.seed}"></label><label class="f">Výška kopců (m) <b>${gen.hill}</b><input type="range" id="gHill" min="0" max="6" step=".5" value="${gen.hill}"></label>
+  <label class="f">Velikost kopců <b>${gen.scale}</b><input type="range" id="gScale" min="4" max="30" step="1" value="${gen.scale}"></label><label class="f">Skvrny jiné trávy <b>${gen.patch}</b><input type="range" id="gPatch" min="0" max="1" step=".05" value="${gen.patch}"></label>
+  <label class="ck"><input type="checkbox" id="gPath" ${gen.path?'checked':''}>Cesta (hlína) přes mapu</label><div class="row"><button class="pri" id="gGo">Vygenerovat</button><button id="gFlat">Rovná louka</button></div><p class="hint">Přepíše výšku i vrstvy. Pak dolaď štětcem.</p></div>
+  <div class="card"><b>Rozsypat detaily</b><label class="f">Typ<select id="sType">${M.detail_types.map(t=>`<option>${esc(t)}</option>`).join('')}</select></label><label class="f">Po vrstvě<select id="sLay">${M.layers.slice(0,4).map((l,i)=>`<option value="${i}">${esc(l.name)}</option>`).join('')}</select></label>
+  <label class="f">Hustota (ks/m²)<input type="number" id="sDen" value="1" step=".25" min=".05"></label><div class="row"><button id="sGo">Rozsypat</button><button id="sClr">Smazat typ</button></div><p class="hint">Tráva na vrstvě G0 se doplňuje i automaticky při importu v Godotu (data/scatter/grass.tres).</p></div>`;
+ if(tab==='map'){const l=M.light;h+=`<div class="card"><b>Světlo a atmosféra</b>${[['sun_yaw','Slunce – otočení °',-180,180],['sun_pitch','Slunce – sklon °',-85,-5],['sun_energy','Síla slunce',0,3],['amb_energy','Síla okolního světla',0,2]].map(([k,t,a,b])=>`<label class="f">${t}<input type="range" data-lt="${k}" min="${a}" max="${b}" step=".05" value="${l[k]}"></label>`).join('')}
+  ${[['sun_color','Barva slunce'],['amb_color','Okolní světlo'],['sky','Obloha']].map(([k,t])=>`<div class="row"><span>${t}</span><input type="color" data-lt="${k}" value="${l[k]}"></div>`).join('')}
+  <div class="row" style="margin-top:6px"><button data-pre="day">Den</button><button data-pre="eve">Večer</button><button data-pre="night">Noc</button></div>
+  <label class="f" style="margin-top:8px">Max. výška terénu (m)<input type="number" id="mH" value="${M.max_h}" min="1" max="20"></label></div>`}
+ if(tab==='obj')h+=objPanel();
+ if(tab==='chk')h+=`<div id="chk"></div><p class="hint">Export = ZIP se složkou <code>maps/${esc(M.id)}/</code>. Pošli mi ho nebo ho hoď do složky <code>incoming/</code> v projektu.</p>`;
+ S.innerHTML=h;
+ S.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;side()});
+ S.querySelectorAll('[data-up]').forEach(b=>{b.onclick=()=>{const f=document.createElement('input');f.type='file';f.accept='image/*';f.onchange=()=>setTex(+b.dataset.up,f.files[0]);f.click()};
+   b.ondragover=e=>e.preventDefault();b.ondrop=e=>{e.preventDefault();setTex(+b.dataset.up,e.dataTransfer.files[0])}});
+ S.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{M.layers[+b.dataset.rm].tex='';TX[+b.dataset.rm]=null;dirtyAll();side()});
+ S.querySelectorAll('[data-lk]').forEach(e=>e.oninput=()=>{const[i,k]=e.dataset.lk.split('.');M.layers[+i][k]=e.type==='checkbox'?e.checked:e.type==='number'?+e.value:e.value;if(k==='tint')tools();dirtyAll()});
+ S.querySelectorAll('[data-lt]').forEach(e=>e.oninput=()=>{M.light[e.dataset.lt]=e.type==='range'?+e.value:e.value;dirtyAll()});
+ S.querySelectorAll('[data-pre]').forEach(b=>b.onclick=()=>{Object.assign(M.light,({day:{sun_yaw:-35,sun_pitch:-50,sun_color:'#fff1d6',sun_energy:1,amb_color:'#a8b4cc',amb_energy:.6,sky:'#8cb8e6'},eve:{sun_yaw:-80,sun_pitch:-15,sun_color:'#ff9a55',sun_energy:1.1,amb_color:'#9a7a9a',amb_energy:.5,sky:'#f0a070'},night:{sun_yaw:-35,sun_pitch:-40,sun_color:'#8aa0ff',sun_energy:.35,amb_color:'#3a4470',amb_energy:.5,sky:'#141c3c'}})[b.dataset.pre]);dirtyAll();side()});
+ if($('#mH'))$('#mH').onchange=e=>{M.max_h=clamp(+e.target.value||6,1,20);dirtyAll()};
+ if($('#gGo')){const rd=()=>{gen.seed=+$('#gSeed').value;gen.hill=+$('#gHill').value;gen.scale=+$('#gScale').value;gen.patch=+$('#gPatch').value;gen.path=$('#gPath').checked};$('#gGo').onclick=()=>{rd();generate()};$('#gFlat').onclick=()=>{rd();M.height.fill(0);for(let i=0;i<gw*gh;i++){M.splat.set([255,0,0,0],i*4)}dirtyAll()};
+  $('#sGo').onclick=()=>scatterFill($('#sType').value,+$('#sLay').value,+$('#sDen').value);$('#sClr').onclick=()=>{delete M.details[$('#sType').value];draw()}}
+ if(tab==='obj')bindObj();if(tab==='chk')check()}
+function setTex(i,f){if(!f||!f.type.startsWith('image/'))return;const fr=new FileReader();fr.onload=()=>{M.layers[i].tex=fr.result;loadTex(i);side();tools()};fr.readAsDataURL(f)}
+// ---------- objekty ----------
+const OFIELDS={spawn:[['id','ID spawnu','text']],exit:[['map','Cílová mapa (ID)','text'],['spawn','Cílový spawn','text'],['w','Šířka (m)','number'],['d','Hloubka (m)','number']],npc:[['id','ID postavy (z tvůrce postav)','text']],enemy:[['id','ID postavy (z tvůrce postav)','text']],
+ box:[['w','Šířka (m)','number'],['d','Hloubka (m)','number'],['h','Výška (m)','number']],model:[['id','Soubor modelu v assets/props/ (bez přípony)','text'],['rot','Otočení °','number'],['scale','Měřítko','number'],['solid','Kolize','bool']]};
+const ODEF={spawn:{id:'start'},exit:{map:'les',spawn:'start',w:3,d:1},npc:{id:'vesnicanka_marta'},enemy:{id:'slime'},box:{w:2,d:2,h:2},model:{id:'strom',rot:0,scale:1,solid:true}};
+function objPanel(){const o=sel!==null?M.objects[sel]:null;if(!o)return `<div class="card hint">Vyber nástroj <b>Objekty</b> a klikni do mapy, nebo použij <b>Vybrat / posunout</b> a klikni na objekt.<br><br>Objektů: ${M.objects.length}</div>`;
+ return `<div class="card"><b>${OBJ[o.t][0]} ${OBJ[o.t][1]}</b>${OFIELDS[o.t].map(([k,l,t])=>t==='bool'?`<label class="ck"><input type="checkbox" data-ok="${k}" ${o[k]?'checked':''}>${l}</label>`:`<label class="f">${l}<input type="${t}" data-ok="${k}" step="any" value="${esc(o[k])}"></label>`).join('')}
+ <div class="row"><label class="f" style="margin:0">X (m)<input type="number" data-ok="x" step=".5" value="${o.x}"></label><label class="f" style="margin:0">Z (m)<input type="number" data-ok="z" step=".5" value="${o.z}"></label></div><button class="del sm" id="oDel" style="color:var(--err);margin-top:6px">Smazat (Del)</button></div>`}
+function bindObj(){document.querySelectorAll('[data-ok]').forEach(e=>e.oninput=()=>{const o=M.objects[sel];o[e.dataset.ok]=e.type==='checkbox'?e.checked:e.type==='number'?+e.value:e.value;draw()});const d=$('#oDel');if(d)d.onclick=delSel}
+function delSel(){if(sel===null)return;M.objects.splice(sel,1);sel=null;side();draw()}
+// ---------- generátor ----------
+const gen={seed:1,hill:2,scale:12,patch:.5,path:true};
+function rng(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function vnoise(seed){const r=rng(seed),P=new Float32Array(1024);for(let i=0;i<1024;i++)P[i]=r();
+  const h=(x,y)=>P[((x*73856093^y*19349663)>>>0)%1024];
+  return(x,y)=>{const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy,sx=fx*fx*(3-2*fx),sy=fy*fy*(3-2*fy);
+    return(h(ix,iy)*(1-sx)+h(ix+1,iy)*sx)*(1-sy)+(h(ix,iy+1)*(1-sx)+h(ix+1,iy+1)*sx)*sy}}
+function generate(){const n1=vnoise(gen.seed*7+1),n2=vnoise(gen.seed*13+5),n3=vnoise(gen.seed*3+9);
+  const ph=gen.seed%7;
+  for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){const mx=x/M.cpm,mz=y/M.cpm;
+    let h=(n1(mx/gen.scale,mz/gen.scale)*.7+n1(mx/gen.scale*2.3,mz/gen.scale*2.3)*.3);
+    // okraje výš (kotlina), střed plošší
+    const ex=Math.min(mx,M.w-mx)/M.w,ez=Math.min(mz,M.d-mz)/M.d,edge=1-sstep(0,.18,Math.min(ex,ez));
+    h=h*.6+edge*.7;h=Math.max(0,h-.25)*gen.hill/M.max_h*1.6;
+    // cesta: sinusoida
+    let pathW=0;if(gen.path){const cx=M.w*(.5+.18*Math.sin(mz/M.d*6.28+ph)),d=Math.abs(mx-cx);pathW=1-sstep(1.2,2.6,d);h*=1-pathW*.9}
+    M.height[y*gw+x]=clamp(h,0,1);
+    const p=n2(mx/5,mz/5),q=n3(mx/7,mz/7);let w=[255,0,0,0];
+    if(p>1-gen.patch*.5)w=[0,255,0,0];else if(q<gen.patch*.3)w=[0,0,0,255];
+    if(pathW>.5)w=[0,0,255,0];
+    M.splat.set(w,(y*gw+x)*4)}
+  // smoothing weights lightly handled by shader/render
+  dirtyAll()}
+function scatterFill(type,layer,den){const r=rng(Date.now()&0xffff),pts=M.details[type]=M.details[type]||[];
+  const cell=1/Math.sqrt(den),seen=new Set(pts.map(p=>Math.floor(p[0]/cell)+','+Math.floor(p[1]/cell)));
+  const tries=Math.floor(M.w*M.d*den*1.4);
+  for(let i=0;i<tries&&pts.length<40000;i++){const x=r()*M.w,z=r()*M.d,w=sampleSplat(x,z);
+    const sum=w[0]+w[1]+w[2]+w[3];if(w[layer]/Math.max(sum,.001)<.6||w[layer]<.5)continue;
+    if(slopeAt(x,z)>.45)continue;const k=Math.floor(x/cell)+','+Math.floor(z/cell);if(seen.has(k))continue;seen.add(k);pts.push([+x.toFixed(2),+z.toFixed(2)])}
+  draw()}
+function sampleSplat(x,z){const u=x*M.cpm,v=z*M.cpm,x0=Math.min(gw-2,Math.floor(u)),y0=Math.min(gh-2,Math.floor(v)),fx=u-x0,fy=v-y0,w=[0,0,0,0];
+  for(let c=0;c<4;c++){const s=(a,b)=>M.splat[((y0+b)*gw+x0+a)*4+c];w[c]=((s(0,0)*(1-fx)+s(1,0)*fx)*(1-fy)+(s(0,1)*(1-fx)+s(1,1)*fx)*fy)/255}return w}
+function slopeAt(x,z){const g=(a,b)=>M.height[clamp(Math.round(b*M.cpm),0,gh-1)*gw+clamp(Math.round(a*M.cpm),0,gw-1)];
+  const dx=(g(x+.5,z)-g(x-.5,z))*M.max_h,dz=(g(x,z+.5)-g(x,z-.5))*M.max_h;const n=Math.hypot(dx,1,dz);return 1-1/n}
+// ---------- kreslení ----------
+const m2s=(x,z)=>[view.ox+x*view.s,view.oy+z*view.s];
+function draw(){if(!M)return;if(pvDirty)renderPreview();ctx.clearRect(0,0,cv.width,cv.height);ctx.imageSmoothingEnabled=true;
+  ctx.drawImage(PV,view.ox,view.oy,M.w*view.s,M.d*view.s);
+  if(showGrid&&view.s>=10){ctx.strokeStyle='#ffffff18';ctx.lineWidth=1;ctx.beginPath();for(let x=0;x<=M.w;x++){ctx.moveTo(view.ox+x*view.s,view.oy);ctx.lineTo(view.ox+x*view.s,view.oy+M.d*view.s)}for(let z=0;z<=M.d;z++){ctx.moveTo(view.ox,view.oy+z*view.s);ctx.lineTo(view.ox+M.w*view.s,view.oy+z*view.s)}ctx.stroke()}
+  ctx.strokeStyle='#fff6';ctx.strokeRect(view.ox,view.oy,M.w*view.s,M.d*view.s);
+  const cols={grass:'#3c8c2a',flowers:'#ffd24a',stone:'#bbb'};
+  for(const[t,pts]of Object.entries(M.details)){ctx.fillStyle=cols[t]||'#e070e0';for(const p of pts){const[x,y]=m2s(p[0],p[1]);ctx.fillRect(x-1,y-1,2.5,2.5)}}
+  M.objects.forEach((o,i)=>{const[ic,n,c]=OBJ[o.t],[x,y]=m2s(o.x,o.z);ctx.strokeStyle=c;ctx.fillStyle=c+'55';ctx.lineWidth=i===sel?3:1.5;
+    if(o.t==='exit'||o.t==='box'){const w=o.w*view.s,d=o.d*view.s;ctx.fillRect(x-w/2,y-d/2,w,d);ctx.strokeRect(x-w/2,y-d/2,w,d)}
+    else{ctx.beginPath();ctx.arc(x,y,9,0,7);ctx.fill();ctx.stroke()}
+    ctx.fillStyle='#fff';ctx.font='12px system-ui';ctx.textAlign='center';ctx.fillText(ic,x,y+4);
+    const lab=o.t==='spawn'?o.id:o.t==='exit'?'→ '+o.map:o.t==='npc'||o.t==='enemy'||o.t==='model'?o.id:'';if(lab){ctx.fillStyle='#fffd';ctx.fillText(lab,x,y-13)}});
+  if(mouse.in&&['layer','raise','lower','smooth','flat','detail'].includes(tool.k)){const[x,y]=m2s(mouse.x,mouse.z);ctx.strokeStyle='#ffe066';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,brush*view.s,0,7);ctx.stroke()}
+  $('#stat').textContent=`${M.w}×${M.d} m · mřížka ${gw}×${gh} · ${mouse.in?`x ${mouse.x.toFixed(1)} z ${mouse.z.toFixed(1)}`:''}`}
+// ---------- myš ----------
+const mouse={x:0,z:0,in:false,down:false,pan:false,drag:null};let spacing=null,lastApply=0;
+const toM=e=>{const r=cv.getBoundingClientRect();return[(e.clientX-r.left-view.ox)/view.s,(e.clientY-r.top-view.oy)/view.s]};
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('wheel',e=>{e.preventDefault();const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,k=e.deltaY<0?1.15:1/1.15,ns=clamp(view.s*k,3,80);view.ox=mx-(mx-view.ox)*ns/view.s;view.oy=my-(my-view.oy)*ns/view.s;view.s=ns;draw()},{passive:false});
+cv.addEventListener('mousedown',e=>{const[x,z]=toM(e);mouse.x=x;mouse.z=z;
+  if(e.button!==0){mouse.pan=true;mouse.px=e.clientX;mouse.py=e.clientY;return}
+  mouse.down=true;
+  if(tool.k==='obj'){const o={t:tool.i,x:snap(x),z:snap(z),...JSON.parse(JSON.stringify(ODEF[tool.i]))};if(tool.i==='spawn'&&M.objects.some(q=>q.t==='spawn'&&q.id===o.id))o.id='spawn'+M.objects.length;M.objects.push(o);sel=M.objects.length-1;tab='obj';side();draw();mouse.down=false;return}
+  if(tool.k==='select'){sel=hit(x,z);mouse.drag=sel;if(sel!==null)tab='obj';side();draw();return}
+  if(tool.k==='flat'){flatH=hAt(x,z)}
+  if(tool.k==='detail')initSpacing();
+  apply(x,z,e.shiftKey)});
+addEventListener('mouseup',()=>{mouse.down=false;mouse.pan=false;mouse.drag=null});
+cv.addEventListener('mousemove',e=>{const[x,z]=toM(e);mouse.x=x;mouse.z=z;mouse.in=true;
+  if(mouse.pan){view.ox+=e.clientX-mouse.px;view.oy+=e.clientY-mouse.py;mouse.px=e.clientX;mouse.py=e.clientY}
+  else if(mouse.drag!==null&&mouse.drag!==undefined){const o=M.objects[mouse.drag];o.x=snap(x);o.z=snap(z);side()}
+  else if(mouse.down)apply(x,z,e.shiftKey);draw()});
+cv.addEventListener('mouseleave',()=>{mouse.in=false;draw()});
+addEventListener('keydown',e=>{if((e.key==='Delete'||e.key==='Backspace')&&!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){delSel()}});
+setInterval(()=>{if(mouse.down&&['layer','raise','lower','smooth'].includes(tool.k)&&mouse.in){apply(mouse.x,mouse.z,false);draw()}},50);
+const snap=v=>Math.round(v*2)/2;
+function hit(x,z){let b=null,bd=1.2;M.objects.forEach((o,i)=>{const inb=(o.t==='exit'||o.t==='box')&&Math.abs(x-o.x)<=o.w/2&&Math.abs(z-o.z)<=o.d/2;const d=inb?0:Math.hypot(x-o.x,z-o.z);if(d<bd){bd=d;b=i}});return b}
+const hAt=(x,z)=>M.height[clamp(Math.round(z*M.cpm),0,gh-1)*gw+clamp(Math.round(x*M.cpm),0,gw-1)];
+function initSpacing(){const den=detDen[detType]||2,cell=1/Math.sqrt(den);spacing={cell,set:new Set((M.details[detType]||[]).map(p=>Math.floor(p[0]/cell)+','+Math.floor(p[1]/cell)))}}
+const detDen={grass:5,flowers:1.5,stone:.4};
+function apply(x,z,shift){const k=tool.k,r=brush;
+  if(k==='detail'){const pts=M.details[detType]=M.details[detType]||[];
+    if(tool.erase||shift){M.details[detType]=pts.filter(p=>Math.hypot(p[0]-x,p[1]-z)>r);initSpacing()}
+    else{const den=detDen[detType]||2,tries=Math.ceil(Math.PI*r*r*den*.8)+1;for(let i=0;i<tries;i++){const a=Math.random()*6.283,d=Math.sqrt(Math.random())*r,px=x+Math.cos(a)*d,pz=z+Math.sin(a)*d;if(px<0||pz<0||px>M.w||pz>M.d)continue;const key=Math.floor(px/spacing.cell)+','+Math.floor(pz/spacing.cell);if(spacing.set.has(key))continue;spacing.set.add(key);pts.push([+px.toFixed(2),+pz.toFixed(2)])}}
+    draw();return}
+  if(!['layer','raise','lower','smooth','flat'].includes(k))return;
+  const cx=x*M.cpm,cz=z*M.cpm,rr=r*M.cpm,t0=strength*.35;
+  for(let gy=Math.max(0,Math.floor(cz-rr));gy<=Math.min(gh-1,Math.ceil(cz+rr));gy++)for(let gx=Math.max(0,Math.floor(cx-rr));gx<=Math.min(gw-1,Math.ceil(cx+rr));gx++){
+    const d=Math.hypot(gx-cx,gy-cz)/rr;if(d>1)continue;const f=(1-d*d)*(1-d*d),t=t0*f,i=gy*gw+gx;
+    if(k==='layer'){const tgt=tool.i<4?[0,0,0,0].map((_,c)=>c===tool.i?255:0):[0,0,0,0];for(let c=0;c<4;c++)M.splat[i*4+c]+=(tgt[c]-M.splat[i*4+c])*Math.min(1,t*1.6)}
+    else if(k==='raise')M.height[i]=clamp(M.height[i]+t*.06*6/M.max_h,0,1);
+    else if(k==='lower')M.height[i]=clamp(M.height[i]-t*.06*6/M.max_h,0,1);
+    else if(k==='flat')M.height[i]+=(flatH-M.height[i])*Math.min(1,t*1.5);
+    else if(k==='smooth'){let s=0,n=0;for(const[a,b]of[[1,0],[-1,0],[0,1],[0,-1]]){const nx=gx+a,ny=gy+b;if(nx>=0&&ny>=0&&nx<gw&&ny<gh){s+=M.height[ny*gw+nx];n++}}M.height[i]+=(s/n-M.height[i])*Math.min(1,t*2)}}
+  dirtyAll()}
+// ---------- ZIP (store) ----------
+const CRC=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc32=b=>{let c=~0;for(let i=0;i<b.length;i++)c=CRC[(c^b[i])&255]^(c>>>8);return ~c>>>0};
+function buildZip(files){const enc=new TextEncoder(),parts=[],cen=[];let off=0;
+  for(const f of files){const nm=enc.encode(f.name),crc=crc32(f.data),sz=f.data.length;
+    const lh=new DataView(new ArrayBuffer(30));lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);lh.setUint16(26,nm.length,true);
+    parts.push(new Uint8Array(lh.buffer),nm,f.data);
+    const ch=new DataView(new ArrayBuffer(46));ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);ch.setUint32(16,crc,true);ch.setUint32(20,sz,true);ch.setUint32(24,sz,true);ch.setUint16(28,nm.length,true);ch.setUint32(42,off,true);
+    cen.push(new Uint8Array(ch.buffer),nm);off+=30+nm.length+sz}
+  const cs=cen.reduce((a,b)=>a+b.length,0),e=new DataView(new ArrayBuffer(22));e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cs,true);e.setUint32(16,off,true);
+  return new Blob([...parts,...cen,new Uint8Array(e.buffer)],{type:'application/zip'})}
+async function readZip(buf){const u=new Uint8Array(buf),dv=new DataView(buf),out={};let p=u.length-22;while(p>=0&&dv.getUint32(p,true)!==0x06054b50)p--;if(p<0)throw new Error('Není ZIP');
+  const n=dv.getUint16(p+10,true);let q=dv.getUint32(p+16,true);
+  for(let i=0;i<n;i++){const m=dv.getUint16(q+10,true),cs=dv.getUint32(q+20,true),nl=dv.getUint16(q+28,true),el=dv.getUint16(q+30,true),cl=dv.getUint16(q+32,true),lo=dv.getUint32(q+42,true);
+    const name=new TextDecoder().decode(u.subarray(q+46,q+46+nl)),ln=dv.getUint16(lo+26,true),le=dv.getUint16(lo+28,true),ds=lo+30+ln+le;let d=u.slice(ds,ds+cs);
+    if(m===8){d=new Uint8Array(await new Response(new Blob([d]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer())}out[name]=d;q+=46+nl+el+cl}return out}
+const b64=u=>{let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)};
+const unb64=s=>{const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u};
+const dataBytes=url=>unb64(url.split(',')[1]);
+function mapJson(){const h16=new Uint8Array(gw*gh*2);for(let i=0;i<gw*gh;i++){const v=Math.round(M.height[i]*65535);h16[i*2]=v&255;h16[i*2+1]=v>>8}
+  return{version:1,id:M.id,name:M.name,size:[M.w,M.d],cpm:M.cpm,max_height:M.max_h,grid:[gw,gh],
+   layers:M.layers.map((l,i)=>({name:l.name,tint:l.tint,tile:l.tile,pixel:l.pixel,texture:l.tex?`tex${i}.png`:''})),
+   light:M.light,objects:M.objects,detail_types:M.detail_types,details:M.details,height_b64:b64(h16),splat_b64:b64(M.splat)}}
+function exportZip(){const errs=check(true);if(errs.some(e=>e[0]==='e')&&!confirm('Mapa má chyby:\n'+errs.filter(e=>e[0]==='e').map(e=>'• '+e[1]).join('\n')+'\nExportovat i tak?'))return;
+  const enc=new TextEncoder(),base=`maps/${M.id}/`,files=[{name:base+'map.json',data:enc.encode(JSON.stringify(mapJson()))}];
+  M.layers.forEach((l,i)=>{if(l.tex)files.push({name:base+`tex${i}.png`,data:dataBytes(l.tex)})});
+  const a=document.createElement('a');a.href=URL.createObjectURL(buildZip(files));a.download=M.id+'.zip';a.click()}
+async function importZip(buf){const f=await readZip(buf);const key=Object.keys(f).find(k=>/^maps\/[^/]+\/map\.json$/.test(k));if(!key)throw new Error('V ZIPu není maps/<id>/map.json');
+  const j=JSON.parse(new TextDecoder().decode(f[key])),base=key.replace('map.json','');
+  M=newMap();Object.assign(M,{id:j.id,name:j.name,w:j.size[0],d:j.size[1],cpm:j.cpm,max_h:j.max_height,light:Object.assign(M.light,j.light),objects:j.objects||[],detail_types:j.detail_types||M.detail_types,details:j.details||{}});
+  gw=j.grid[0];gh=j.grid[1];const hb=unb64(j.height_b64);M.height=new Float32Array(gw*gh);for(let i=0;i<gw*gh;i++)M.height[i]=(hb[i*2]|hb[i*2+1]<<8)/65535;M.splat=unb64(j.splat_b64);
+  j.layers.forEach((l,i)=>{Object.assign(M.layers[i],{name:l.name,tint:l.tint,tile:l.tile,pixel:l.pixel,tex:''});const t=f[base+l.texture];if(l.texture&&t){M.layers[i].tex='data:image/png;base64,'+b64(t);loadTex(i)}});
+  head();tools();side();fit();dirtyAll();draw()}
+// ---------- kontrola ----------
+function check(ret){const m=[],E=t=>m.push(['e',t]),W=t=>m.push(['w',t]);
+  if(!/^[a-z0-9_]+$/.test(M.id))E('ID mapy: jen a–z, 0–9, podtržítko.');
+  if(!M.objects.some(o=>o.t==='spawn'&&o.id==='start'))E('Chybí spawn s ID „start“ (hráč by se neměl kde objevit).');
+  M.objects.filter(o=>o.t==='exit').forEach(o=>{if(!o.map)E('Exit bez cílové mapy.')});
+  M.objects.filter(o=>o.t==='npc'||o.t==='enemy').forEach(o=>{if(!o.id)E('Postava bez ID.')});
+  M.layers.slice(0,4).forEach((l,i)=>{if(!l.tex)W(`Vrstva ${l.name} nemá texturu (použije se jen barva).`)});
+  if(!M.layers[4].tex)W('Útes nemá texturu.');
+  M.objects.filter(o=>o.t==='spawn'&&(o.x<0||o.z<0||o.x>M.w||o.z>M.d)).forEach(()=>E('Spawn je mimo mapu.'));
+  if(!m.length)m.push(['o','Vše v pořádku.']);
+  if(ret)return m;const c=$('#chk');if(c)c.innerHTML=m.map(([t,x])=>`<div class="msg ${t}">${esc(x)}</div>`).join('')+`<div class="card hint" style="margin-top:8px">Objektů: ${M.objects.length} · detailů: ${Object.values(M.details).reduce((a,b)=>a+b.length,0)}</div>`}
+// ---------- start ----------
+function head(){$('#mId').value=M.id;$('#mName').value=M.name;$('#mW').value=M.w;$('#mD').value=M.d;$('#mCpm').value=M.cpm}
+$('#mId').oninput=e=>M.id=slug(e.target.value).replace(/-/g,'_');$('#mName').oninput=e=>M.name=e.target.value;
+const rs=()=>{M.w=clamp(+$('#mW').value||32,8,128);M.d=clamp(+$('#mD').value||28,8,128);M.cpm=+$('#mCpm').value;alloc(true);fit();draw()};
+['mW','mD','mCpm'].forEach(i=>$('#'+i).onchange=rs);
+$('#bExp').onclick=exportZip;$('#fZip').onchange=async e=>{try{await importZip(await e.target.files[0].arrayBuffer())}catch(x){alert('Nelze načíst: '+x.message)}e.target.value=''};
+addEventListener('beforeunload',e=>{e.preventDefault();e.returnValue=''});
+M=newMap();alloc(false);head();tools();side();resizeCv();fit();generate();draw();
+(function loop(){if(pvDirty)draw();requestAnimationFrame(loop)})();
+</script></body></html>

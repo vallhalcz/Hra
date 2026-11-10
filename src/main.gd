@@ -16,5 +16,6 @@ func _ready() -> void:
 	cam.target = player
 	add_child(cam)
 	cam.current = true
+	Game.world_env = we
 	Game.setup(holder, player, cam)
 	Game.change_map(Game.START_MAP, Game.START_SPAWN, false)

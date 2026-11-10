@@ -13,6 +13,7 @@ const EXTS := [".tscn", ".glb", ".gltf", ".fbx"]
 var holder: Node3D
 var player: Player
 var camera: Hd2dCamera
+var world_env: WorldEnvironment
 var current_map: Node3D
 var current_id := ""
 var busy := false
@@ -37,6 +38,9 @@ func setup(p_holder: Node3D, p_player: Player, p_camera: Hd2dCamera) -> void:
 	camera = p_camera
 
 func map_path(id: String) -> String:
+	var gen := "res://maps/%s/map.json" % id  # mapa z návrháře map
+	if FileAccess.file_exists(gen):
+		return gen
 	for base in ["res://maps/", "res://assets/maps/"]:
 		for e in EXTS:
 			var p := "%s%s%s" % [base, id, e]
@@ -49,7 +53,7 @@ func preload_map(id: String) -> void:
 	if _requested.has(id):
 		return
 	var p := map_path(id)
-	if p != "":
+	if p != "" and not p.ends_with(".json"):
 		_requested[id] = p
 		ResourceLoader.load_threaded_request(p)
 
@@ -64,18 +68,27 @@ func change_map(id: String, spawn_id := "start", fade := true) -> void:
 	player.set_physics_process(false)
 	if fade:
 		await _fade(1.0)
-	preload_map(id)
-	var scene := ResourceLoader.load_threaded_get(_requested[id]) as PackedScene
+	var new_map: Node3D
+	if p.ends_with(".json"):
+		new_map = MapGenerator.build(p)
+	else:
+		preload_map(id)
+		new_map = (ResourceLoader.load_threaded_get(_requested[id]) as PackedScene).instantiate()
+	if new_map == null:
+		busy = false
+		player.set_physics_process(true)
+		return
 	if current_map:
 		holder.remove_child(current_map)
 		current_map.queue_free()
-	current_map = scene.instantiate()
+	current_map = new_map
 	current_id = id
 	holder.add_child(current_map)
 	for c in current_map.get_children():  # metadata z importované mapy uvnitř wrapper scény
-		for k in c.get_meta_list():
-			if not current_map.has_meta(k):
+		for k in ["bounds", "cam_offset", "cam_basis", "cam_fov"]:
+			if c.has_meta(k) and not current_map.has_meta(k):
 				current_map.set_meta(k, c.get_meta(k))
+	_apply_env()
 	_wire_exits()
 	_spawn_characters()
 	var sp := current_map.find_child("SPAWN_" + spawn_id, true, false) as Node3D
@@ -88,6 +101,14 @@ func change_map(id: String, spawn_id := "start", fade := true) -> void:
 	if fade:
 		await _fade(0.0)
 	busy = false
+
+func _apply_env() -> void:
+	if world_env == null or not current_map.has_meta("sky_color"):
+		return
+	var e := world_env.environment
+	e.background_color = current_map.get_meta("sky_color")
+	e.ambient_light_color = current_map.get_meta("ambient_color")
+	e.ambient_light_energy = current_map.get_meta("ambient_energy")
 
 func _spawn_characters() -> void:
 	for m in current_map.find_children("*", "Marker3D", true, false):
