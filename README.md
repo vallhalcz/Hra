@@ -30,3 +30,6 @@ Malé 3D scény z Blenderu + 2D billboard sprity, pevná kamera, rychlé přecho
 - `src/camera/hd2d_camera.gd` – pevná kamera + tilt-shift DoF
 - `src/map/map_builder.gd` – import mapy z Blenderu
 - `src/shaders/` – terén a billboard sprity
+
+## Blender doplněk
+`tools/blender/hra_map_tools.py` → Edit › Preferences › Add-ons › Install… Panel **Hra** (klávesa N): materiály G0–G3, přejmenování výběru (Terrain/SOLID/COL), scatter plochy, spawn, exit a export GLB rovnou do `assets/maps/`.
