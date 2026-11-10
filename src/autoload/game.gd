@@ -2,6 +2,9 @@ extends Node
 ## Správa map: rychlé přechody (fade 0.18 s), předčítání sousedních map na pozadí.
 ## Mapy: res://assets/maps/<id>.(tscn|glb|fbx) — id = název souboru.
 
+signal interaction_started(npc)
+signal battle_requested(npc)
+
 const START_MAP := "uvod"
 const START_SPAWN := "start"
 const FADE_TIME := 0.18
@@ -74,6 +77,7 @@ func change_map(id: String, spawn_id := "start", fade := true) -> void:
 			if not current_map.has_meta(k):
 				current_map.set_meta(k, c.get_meta(k))
 	_wire_exits()
+	_spawn_characters()
 	var sp := current_map.find_child("SPAWN_" + spawn_id, true, false) as Node3D
 	player.global_position = (sp.global_position if sp else Vector3.ZERO) + Vector3(0, 0.05, 0)
 	player.velocity = Vector3.ZERO
@@ -84,6 +88,17 @@ func change_map(id: String, spawn_id := "start", fade := true) -> void:
 	if fade:
 		await _fade(0.0)
 	busy = false
+
+func _spawn_characters() -> void:
+	for m in current_map.find_children("*", "Marker3D", true, false):
+		if not m.has_meta("character_id"):
+			continue
+		var npc := Npc.new()
+		if npc.setup(m.get_meta("character_id")):
+			current_map.add_child(npc)
+			npc.global_position = m.global_position
+		else:
+			npc.free()
 
 func _wire_exits() -> void:
 	for a in current_map.find_children("*", "Area3D", true, false):
@@ -103,6 +118,7 @@ func _setup_input() -> void:
 	var map := {
 		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"move_up": [KEY_W, KEY_UP], "move_down": [KEY_S, KEY_DOWN],
+		"interact": [KEY_E, KEY_ENTER, KEY_SPACE],
 	}
 	for action in map:
 		if not InputMap.has_action(action):
@@ -111,6 +127,9 @@ func _setup_input() -> void:
 			var ev := InputEventKey.new()
 			ev.physical_keycode = k
 			InputMap.action_add_event(action, ev)
+	var jb := InputEventJoypadButton.new()
+	jb.button_index = JOY_BUTTON_A
+	InputMap.action_add_event("interact", jb)
 	var axes := {"move_left": [JOY_AXIS_LEFT_X, -1.0], "move_right": [JOY_AXIS_LEFT_X, 1.0],
 		"move_up": [JOY_AXIS_LEFT_Y, -1.0], "move_down": [JOY_AXIS_LEFT_Y, 1.0]}
 	for action in axes:

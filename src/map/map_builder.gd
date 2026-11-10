@@ -10,6 +10,7 @@ extends RefCounted
 ##   SCATTER_<typ>       plocha, na které se rozsype sprite typu <typ> (data/scatter/<typ>.tres)
 ##   SPAWN_<id>          Empty = místo, kde se objeví hráč
 ##   EXIT_<mapa>__<id>   Empty (velikost = scale) = přechod do mapy <mapa> na SPAWN_<id>
+##   NPC_<id> / ENEMY_<id>  Empty = kde se objeví postava z res://characters/<id>/ (tvůrce postav)
 ##   Sprite_* / REF_*    pomocné reference, při importu se smažou
 ## Kamera z Blenderu se uloží jako metadata (pohled + FOV) a smaže.
 
@@ -52,6 +53,10 @@ static func build(root: Node) -> void:
 		elif n.get_class() == "Node3D":
 			if nm.begins_with("SPAWN_"):
 				_swap(root, n, Marker3D.new())
+			elif nm.begins_with("NPC_") or nm.begins_with("ENEMY_"):
+				var mk := Marker3D.new()
+				mk.set_meta("character_id", _clean(nm).substr(nm.find("_") + 1))
+				_swap(root, n, mk)
 			elif nm.begins_with("EXIT_"):
 				_build_exit(root, n)
 	if has_bounds:

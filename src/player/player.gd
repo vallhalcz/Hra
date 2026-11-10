@@ -30,6 +30,21 @@ func _ready() -> void:
 	sprite.offset.y = 32  # pivot u nohou
 	add_child(sprite)
 
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("interact"):
+		var best: Npc = null
+		var bd := 1.6
+		for n in get_tree().get_nodes_in_group("npc"):
+			var d := global_position.distance_to(n.global_position)
+			if n is Npc and n.is_interactive() and d < bd:
+				best = n
+				bd = d
+		if best:
+			best.interact()
+			var l := best.next_line()
+			if not l.is_empty():
+				print("[%s] %s" % [l.speaker, l.text])  # placeholder, než bude okno dialogu
+
 func _physics_process(delta: float) -> void:
 	var d := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	velocity.x = d.x * speed

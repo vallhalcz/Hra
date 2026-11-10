@@ -26,6 +26,13 @@ class HRA_OT_exit(bpy.types.Operator):
     def execute(self, ctx):
         e = _empty("EXIT_%s__%s" % (self.target, self.spawn), "CUBE", 0.5); e.scale = (2, 1, 2); return {"FINISHED"}
 
+class HRA_OT_char(bpy.types.Operator):
+    bl_idname = "hra.add_char"; bl_label = "Přidat postavu"; bl_options = {"REGISTER", "UNDO"}
+    cid: bpy.props.StringProperty(name="ID postavy (z tvůrce postav)", default="vesnicanka_marta")
+    enemy: bpy.props.BoolProperty(name="Nepřítel", default=False)
+    def execute(self, ctx):
+        _empty(("ENEMY_" if self.enemy else "NPC_") + self.cid, "PLAIN_AXES", 0.5); return {"FINISHED"}
+
 class HRA_OT_scatter(bpy.types.Operator):
     bl_idname = "hra.scatter_from_selection"; bl_label = "Vybrané meshe → SCATTER"; bl_options = {"REGISTER", "UNDO"}
     stype: bpy.props.StringProperty(name="Typ", default="grass")
@@ -98,12 +105,13 @@ class HRA_PT_panel(bpy.types.Panel):
             r.operator("hra.prefix", text=p.strip("_")).prefix = p
         l.operator("hra.scatter_from_selection")
         l.prop(sc, "hra_pixel"); l.operator("hra.assign_texture")
+        l.operator("hra.add_char")
         l.operator("hra.add_spawn"); l.operator("hra.add_exit")
         l.separator()
         l.prop(sc, "hra_project_dir"); l.prop(sc, "hra_map_id")
         l.operator("hra.export")
 
-CLASSES = (HRA_OT_texture, HRA_OT_spawn, HRA_OT_exit, HRA_OT_scatter, HRA_OT_prefix, HRA_OT_layers, HRA_OT_export, HRA_PT_panel)
+CLASSES = (HRA_OT_char, HRA_OT_texture, HRA_OT_spawn, HRA_OT_exit, HRA_OT_scatter, HRA_OT_prefix, HRA_OT_layers, HRA_OT_export, HRA_PT_panel)
 
 def register():
     for c in CLASSES: bpy.utils.register_class(c)

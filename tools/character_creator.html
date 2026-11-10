@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hra – Tvůrce postav</title>
+<style>
+:root{--bg:#15171c;--panel:#1e2128;--panel2:#262a33;--line:#343a46;--tx:#e8eaee;--mut:#9aa3b2;--acc:#7ccf5a;--acc2:#3f8f2a;--warn:#f0b43c;--err:#ef6a6a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,Segoe UI,Arial,sans-serif;height:100vh;overflow:hidden}
+#app{display:grid;grid-template-columns:260px 1fr;height:100vh}
+aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+aside h1{font-size:16px;margin:0;padding:14px 14px 4px;color:var(--acc)}aside .sub{padding:0 14px 10px;color:var(--mut);font-size:12px}
+.btns{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}
+button,.btn{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font:inherit;cursor:pointer}
+button:hover,.btn:hover{border-color:var(--acc)}button.pri{background:var(--acc2);border-color:var(--acc)}button.del{color:var(--err)}button.sm{padding:2px 8px;font-size:12px}
+#list{overflow:auto;flex:1;padding:0 8px 8px}
+.ci{display:flex;gap:8px;align-items:center;padding:8px;border-radius:6px;cursor:pointer;border:1px solid transparent}
+.ci:hover{background:var(--panel2)}.ci.sel{background:var(--panel2);border-color:var(--acc)}
+.ci canvas{width:36px;height:36px;background:#0003;border-radius:4px;image-rendering:pixelated;flex:none}
+.ci b{display:block;font-weight:600}.ci small{color:var(--mut)}
+main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);background:var(--panel);padding:0 12px}
+.tab{padding:11px 16px;cursor:pointer;color:var(--mut);border-bottom:3px solid transparent}.tab.on{color:var(--tx);border-color:var(--acc)}
+#body{overflow:auto;padding:18px 22px;flex:1}
+.empty{margin:80px auto;max-width:520px;text-align:center;color:var(--mut)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.card h3{margin:0 0 10px;font-size:14px;color:var(--acc)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px 14px}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mut)}
+label.f.w{grid-column:1/-1}
+input[type=text],input[type=number],select,textarea{background:#12141a;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;width:100%}
+textarea{min-height:60px;resize:vertical}input:focus,select:focus,textarea:focus{outline:1px solid var(--acc)}
+label.ck{display:flex;gap:7px;align-items:center;color:var(--tx);font-size:13px}
+.row{display:flex;gap:8px;align-items:flex-end;margin-bottom:6px}.row>*{flex:1}.row>button{flex:none}
+.anim{display:grid;grid-template-columns:200px 1fr;gap:14px}
+.pv{background:repeating-conic-gradient(#222 0 25%,#2a2a2a 0 50%) 0 0/16px 16px;border-radius:8px;display:flex;flex-direction:column;align-items:center;padding:8px;gap:6px}
+.pv canvas{image-rendering:pixelated;max-width:100%}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;color:var(--mut);margin-bottom:14px}.drop.on{border-color:var(--acc);color:var(--tx)}
+.fn{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.fn>header{display:flex;gap:10px;align-items:center;padding:10px 14px;background:var(--panel2);cursor:pointer}
+.fn>header span{color:var(--mut);font-size:12px}.fn>div{padding:12px 14px;background:var(--panel)}
+.tag{display:inline-block;background:#0004;border:1px solid var(--line);border-radius:99px;padding:2px 10px;margin:2px;cursor:pointer;font-size:12px}.tag.on{background:var(--acc2);border-color:var(--acc)}
+.msg{padding:8px 12px;border-radius:6px;margin:4px 0;font-size:13px}.msg.e{background:#ef6a6a22;color:var(--err)}.msg.w{background:#f0b43c22;color:var(--warn)}.msg.o{background:#7ccf5a22;color:var(--acc)}
+pre{background:#0b0c10;padding:12px;border-radius:8px;overflow:auto;max-height:420px;font-size:12px}
+.hint{color:var(--mut);font-size:12px;margin:4px 0}
+</style></head><body>
+<div id="app">
+<aside><h1>⚔ Tvůrce postav</h1><div class="sub">Hra · HD-2D · export → Godot</div>
+<div class="btns"><button class="pri" id="bNew">+ Nová</button><button id="bDup">Duplikovat</button>
+<label class="btn">Načíst ZIP<input type="file" id="fZip" accept=".zip" hidden></label><button id="bAll">Export vše</button></div>
+<div id="list"></div></aside>
+<main><div class="tabs" id="tabs"></div><div id="body"></div></main></div>
+<script>
+'use strict';
+// ====================== data ======================
+const CATS={hero:'Hlavní hrdina',party:'Parťák',npc:'Vedlejší postava',villager:'Vesničan',merchant:'Obchodník',enemy:'Nepřítel',boss:'Boss',animal:'Zvíře'};
+const PRESETS=['idle','walk','run','attack','attack2','cast','hurt','death','talk','sit','sleep','defend','victory','jump'];
+const DIRMODES={'1':'Bez směrů (1 řada; doleva = zrcadlení)','3':'3 směry: dolů, do strany (doprava), nahoru – doleva se zrcadlí','4':'4 směry: dolů, doleva, doprava, nahoru','8':'8 směrů: dolů, dolů-vlevo, vlevo, nahoru-vlevo, nahoru, nahoru-vpravo, vpravo, dolů-vpravo'};
+const ROWS={'1':[],'3':['down','side','up'],'4':['down','left','right','up'],'8':['down','down_left','left','up_left','up','up_right','right','down_right']};
+const WEAK=['sword','spear','dagger','axe','bow','staff','fire','ice','lightning','wind','light','dark'];
+const WEAK_CZ={sword:'Meč',spear:'Kopí',dagger:'Dýka',axe:'Sekera',bow:'Luk',staff:'Hůl',fire:'Oheň',ice:'Led',lightning:'Blesk',wind:'Vítr',light:'Světlo',dark:'Tma'};
+const COMBAT=['hero','party','enemy','boss'];
+let chars=[],sel=-1,tab='base',dirty=false;
+
+const FUNCS=[
+ {k:'dialog',t:'💬 Dialog',d:'Postava umí mluvit (stisk E).',def:()=>({mode:'sequence',lines:[{speaker:'',text:'Dobrý den!'}]}),
+  spec:[{k:'mode',t:'sel',l:'Pořadí vět',o:{sequence:'Postupně',random:'Náhodně'}},{k:'lines',t:'list',l:'Věty',tpl:'line',f:[{k:'speaker',l:'Mluvčí (prázdné = jméno postavy)',t:'text'},{k:'text',l:'Text',t:'text',w:1}]}]},
+ {k:'merchant',t:'🛒 Obchodník',d:'Otevře obchod.',def:()=>({shop_name:'Obchod',buy_mult:1,sell_mult:0.5,items:[{item:'potion',price:50,stock:-1}]}),
+  spec:[{k:'shop_name',t:'text',l:'Název obchodu'},{k:'buy_mult',t:'num',l:'Násobek ceny (nákup)'},{k:'sell_mult',t:'num',l:'Násobek ceny (výkup)'},{k:'items',t:'list',l:'Zboží',tpl:'shopitem',f:[{k:'item',l:'ID předmětu',t:'text'},{k:'price',l:'Cena',t:'num'},{k:'stock',l:'Skladem (-1 = neomezeně)',t:'num'}]}]},
+ {k:'quest',t:'❗ Zadavatel questů',d:'Nabízí questy.',def:()=>({quests:[{id:'',text:''}]}),
+  spec:[{k:'quests',t:'list',l:'Questy',tpl:'quest',f:[{k:'id',l:'ID questu',t:'text'},{k:'text',l:'Poznámka',t:'text',w:1}]}]},
+ {k:'inn',t:'🛏 Hostinec',d:'Přenocování (obnoví HP/SP).',def:()=>({price:30}),spec:[{k:'price',t:'num',l:'Cena za noc'}]},
+ {k:'healer',t:'✚ Léčitel',d:'Vyléčí družinu.',def:()=>({price:0}),spec:[{k:'price',t:'num',l:'Cena'}]},
+ {k:'wander',t:'🚶 Bloudění',d:'Chodí kolem místa, kde stojí.',def:()=>({radius:3,speed:1.2,pause:2}),
+  spec:[{k:'radius',t:'num',l:'Poloměr (m)'},{k:'speed',t:'num',l:'Rychlost (m/s)'},{k:'pause',t:'num',l:'Pauza mezi kroky (s)'}]},
+ {k:'patrol',t:'🧭 Hlídka (trasa)',d:'Chodí po bodech (relativně k místu postavy).',def:()=>({points:'0,0\n4,0\n4,4\n0,4',speed:1.5,loop:true}),
+  spec:[{k:'points',t:'area',l:'Body "x,z" (m), jeden na řádek',w:1},{k:'speed',t:'num',l:'Rychlost'},{k:'loop',t:'bool',l:'Dokola'}]},
+ {k:'sleeps',t:'🌙 Spí v noci',d:'Večer zmizí / jde spát (pro budoucí cyklus dne).',def:()=>({from:21,to:6}),spec:[{k:'from',t:'num',l:'Od hodiny'},{k:'to',t:'num',l:'Do hodiny'}]},
+ {k:'party',t:'🛡 Člen družiny',d:'Dá se přibrat do party.',def:()=>({class:'',level:1,join_map:''}),
+  spec:[{k:'class',t:'text',l:'Povolání'},{k:'level',t:'num',l:'Úroveň při připojení'},{k:'join_map',t:'text',l:'Mapa, kde se připojí'}]},
+ {k:'enemy',t:'☠ Chování nepřítele',d:'Honí hráče, souboj po dotyku.',def:()=>({ai:'wander_chase',aggro:5,leash:12,speed:2.5,respawn:true}),
+  spec:[{k:'ai',t:'sel',l:'AI',o:{stationary:'Stojí',wander:'Bloudí',wander_chase:'Bloudí a honí',chase:'Vždy honí'}},{k:'aggro',t:'num',l:'Dosah vidění (m)'},{k:'leash',t:'num',l:'Max. vzdálenost od domova'},{k:'speed',t:'num',l:'Rychlost'},{k:'respawn',t:'bool',l:'Obnoví se po načtení mapy'}]}
+];
+const CAT_DEFAULTS={hero:[],party:['party','dialog'],npc:['dialog'],villager:['dialog','wander'],merchant:['dialog','merchant'],enemy:['enemy'],boss:['enemy'],animal:['wander']};
+const TPL={line:()=>({speaker:'',text:''}),shopitem:()=>({item:'',price:0,stock:-1}),quest:()=>({id:'',text:''}),drop:()=>({item:'',chance:0.25}),flag:()=>({key:'',value:''})};
+const newStats=()=>({level:1,hp:100,sp:50,patk:10,pdef:10,eatk:10,edef:10,speed:10,crit:5,evasion:5,shields:3,exp:10,money:10,weaknesses:[],drops:[]});
+const newChar=()=>({version:1,id:'nova_postava',name:'Nová postava',category:'villager',description:'',
+ sprite:{frame_w:64,frame_h:64,ppu:64,scale:1,pivot_y:0,shadow:true,collision_radius:0.28},animations:[],functions:{},stats:newStats(),use_stats:false,custom:[],_idAuto:true});
+const newAnim=(name,fw,fh)=>({name:name||'idle',file:'',frame_w:fw,frame_h:fh,frames:4,columns:4,fps:8,loop:true,directions:'1',data:'',_img:null,_dir:0});
+
+// ====================== util ======================
+const $=s=>document.querySelector(s);
+const slug=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'postava';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cur=()=>chars[sel];
+const getP=(o,p)=>p.split('.').reduce((a,k)=>a?.[k],o);
+function setP(o,p,v){const ks=p.split('.');const l=ks.pop();const t=ks.reduce((a,k)=>a[k],o);t[l]=v}
+const mark=()=>{dirty=true};
+addEventListener('beforeunload',e=>{if(dirty&&chars.length){e.preventDefault();e.returnValue=''}});
+
+// ====================== formuláře ======================
+function fld(obj,base,s){ // vrací HTML pole podle specifikace
+  const path=base?base+'.'+s.k:s.k, v=getP(obj,path);
+  const A=`data-k="${path}" data-t="${s.t}"`;
+  const w=s.w?' w':'';
+  if(s.t==='bool')return `<label class="ck${w}"><input type="checkbox" ${A} ${v?'checked':''}> ${esc(s.l)}</label>`;
+  if(s.t==='sel')return `<label class="f${w}">${esc(s.l)}<select ${A}>${Object.entries(s.o).map(([a,b])=>`<option value="${a}" ${a==v?'selected':''}>${esc(b)}</option>`).join('')}</select></label>`;
+  if(s.t==='area')return `<label class="f w">${esc(s.l)}<textarea ${A}>${esc(v)}</textarea></label>`;
+  if(s.t==='list'){
+    const arr=v||[];
+    return `<div class="w" style="grid-column:1/-1"><div class="hint">${esc(s.l)}</div>${arr.map((it,i)=>`<div class="row">${s.f.map(f=>`<label class="f">${esc(f.l)}${inp(it,path+'.'+i,f)}</label>`).join('')}<button class="sm del" data-act="rm" data-path="${path}" data-i="${i}">✕</button></div>`).join('')}<button class="sm" data-act="add" data-path="${path}" data-tpl="${s.tpl}">+ přidat</button></div>`;
+  }
+  return `<label class="f${w}">${esc(s.l)}${inp(obj,path,s)}</label>`;
+}
+function inp(obj,path,s){const v=getP(obj,path);const A=`data-k="${path}" data-t="${s.t}"`;
+  return s.t==='num'?`<input type="number" step="any" ${A} value="${esc(v)}">`:`<input type="text" ${A} value="${esc(v)}">`}
+function bind(root){
+  root.querySelectorAll('[data-k]').forEach(el=>{
+    el.addEventListener('input',()=>{
+      const c=cur();let v=el.type==='checkbox'?el.checked:el.value;
+      if(el.dataset.t==='num')v=v===''?0:parseFloat(v);
+      setP(c,el.dataset.k,v);mark();
+      if(el.dataset.k==='name'&&c._idAuto){c.id=slug(c.name);const i=$('[data-k="id"]');if(i)i.value=c.id}
+      if(el.dataset.k==='id')c._idAuto=false;
+      if(el.dataset.k.startsWith('animations.')&&el.dataset.rerender)render();
+      renderList();
+    });
+    el.addEventListener('change',()=>{if(el.dataset.k==='category'||el.dataset.k.endsWith('.directions')||el.dataset.k.endsWith('.frame_w')||el.dataset.k.endsWith('.frame_h'))render()});
+  });
+  root.querySelectorAll('[data-act]').forEach(b=>b.addEventListener('click',()=>act(b)));
+}
+function act(b){
+  const c=cur(),a=b.dataset.act,p=b.dataset.path;
+  if(a==='add'){const arr=getP(c,p);arr.push(TPL[b.dataset.tpl]())}
+  else if(a==='rm'){getP(c,p).splice(+b.dataset.i,1)}
+  else if(a==='tog'){const arr=getP(c,p),v=b.dataset.val,i=arr.indexOf(v);i<0?arr.push(v):arr.splice(i,1)}
+  else if(a==='fn'){const k=b.dataset.fn;if(c.functions[k])delete c.functions[k];else c.functions[k]=FUNCS.find(f=>f.k===k).def()}
+  else if(a==='catdef'){c.functions={};(CAT_DEFAULTS[c.category]||[]).forEach(k=>c.functions[k]=FUNCS.find(f=>f.k===k).def())}
+  else if(a==='addanim'){c.animations.push(newAnim(b.dataset.name,c.sprite.frame_w,c.sprite.frame_h))}
+  else if(a==='rmanim'){c.animations.splice(+b.dataset.i,1)}
+  else if(a==='autoanim'){autoDetect(c.animations[+b.dataset.i])}
+  else if(a==='pickimg'){pickImage(+b.dataset.i)}
+  else if(a==='dirpv'){const an=c.animations[+b.dataset.i];an._dir=+b.dataset.d;return}
+  else if(a==='exp1'){exportZip([c]);return}
+  mark();render();
+}
+
+// ====================== sidebar ======================
+function renderList(){
+  $('#list').innerHTML=chars.map((c,i)=>`<div class="ci ${i===sel?'sel':''}" data-i="${i}"><canvas width="36" height="36" data-thumb="${i}"></canvas><div><b>${esc(c.name)}</b><small>${CATS[c.category]||''} · ${c.animations.length} anim.</small></div></div>`).join('');
+  $('#list').querySelectorAll('.ci').forEach(e=>e.onclick=()=>{sel=+e.dataset.i;tab=tab;render()});
+  $('#list').querySelectorAll('canvas[data-thumb]').forEach(cv=>{const c=chars[+cv.dataset.thumb];const a=c.animations.find(a=>a.name==='idle'&&a._img)||c.animations.find(a=>a._img);if(a)drawFrame(cv,a,0,0,true)});
+}
+const TABS=[['base','Základ'],['anim','Animace'],['func','Role a funkce'],['stats','Boj'],['export','Kontrola a export']];
+function render(){
+  renderList();
+  $('#tabs').innerHTML=chars.length?TABS.map(([k,t])=>`<div class="tab ${tab===k?'on':''}" data-t="${k}">${t}</div>`).join(''):'';
+  $('#tabs').querySelectorAll('.tab').forEach(e=>e.onclick=()=>{tab=e.dataset.t;render()});
+  const b=$('#body');
+  if(!chars.length||sel<0){b.innerHTML=`<div class="empty"><h2>Začni novou postavou</h2><p>Klikni na <b>+ Nová</b> vlevo, nastav jméno a kategorii, nahraj animace (spritesheety) a zapni role (obchodník, bloudění…). Hotové postavy exportuješ jako ZIP a pošleš mi ho – vložím je do hry.</p><button class="pri" onclick="addChar()">+ Nová postava</button></div>`;return}
+  b.innerHTML=({base:tBase,anim:tAnim,func:tFunc,stats:tStats,export:tExport})[tab]();
+  bind(b);if(tab==='anim')bindAnim(b);if(tab==='export')bindExport(b);
+}
+
+// ====================== záložky ======================
+function tBase(){const c=cur();return `
+<div class="card"><h3>Identita</h3><div class="grid">
+${fld(c,'',{k:'name',t:'text',l:'Jméno (zobrazené ve hře)'})}
+${fld(c,'',{k:'id',t:'text',l:'ID (bez mezer; název složky)'})}
+${fld(c,'',{k:'category',t:'sel',l:'Kategorie',o:CATS})}
+${fld(c,'',{k:'description',t:'text',l:'Poznámka / popis',w:1})}</div>
+<p class="hint">Kategorie jen určuje výchozí role. <button class="sm" data-act="catdef">Použít výchozí role pro tuto kategorii</button> (přepíše zapnuté funkce)</p></div>
+<div class="card"><h3>Sprite</h3><div class="grid">
+${[['frame_w','Šířka snímku (px)'],['frame_h','Výška snímku (px)'],['ppu','Pixelů na metr (64 = jako ve hře)'],['scale','Měřítko'],['pivot_y','Posun pivotu Y (px)'],['collision_radius','Poloměr kolize (m)']].map(([k,l])=>fld(c,'sprite',{k,t:'num',l})).join('')}
+${fld(c,'sprite',{k:'shadow',t:'bool',l:'Stín pod postavou'})}</div>
+<p class="hint">Pivot je u nohou uprostřed spodního okraje snímku. Sprity musí být nakreslené <b>čelem doprava</b> (doleva se zrcadlí).</p></div>
+<div class="card"><h3>Vlastní hodnoty (flagy)</h3>
+<div class="grid">${fld(c,'',{k:'custom',t:'list',l:'Klíč → hodnota (pro skripty, např. "faction" → "vesnice")',tpl:'flag',f:[{k:'key',l:'Klíč',t:'text'},{k:'value',l:'Hodnota',t:'text'}]})}</div></div>`}
+
+function tFunc(){const c=cur();return `<p class="hint">Zapni, co postava umí. Kliknutím na záhlaví se funkce zapne/vypne.</p>`+FUNCS.map(f=>{
+  const on=!!c.functions[f.k];
+  return `<div class="fn"><header data-act="fn" data-fn="${f.k}"><input type="checkbox" ${on?'checked':''} style="pointer-events:none"><b>${f.t}</b><span>${f.d}</span></header>${on?`<div><div class="grid">${f.spec.map(s=>fld(c,'functions.'+f.k,s)).join('')}</div></div>`:''}</div>`}).join('')}
+
+function tStats(){const c=cur();const S=c.stats;
+ const on=COMBAT.includes(c.category)||c.use_stats;
+ return `<div class="card"><h3>Bojové statistiky</h3>
+ ${COMBAT.includes(c.category)?'':fld(c,'',{k:'use_stats',t:'bool',l:'Tato postava má bojové statistiky (u této kategorie jinak ne)'})}
+ <div class="grid" style="${on?'':'opacity:.4'}">${[['level','Úroveň'],['hp','HP'],['sp','SP'],['patk','Fyz. útok'],['pdef','Fyz. obrana'],['eatk','Elem. útok'],['edef','Elem. obrana'],['speed','Rychlost'],['crit','Kritik %'],['evasion','Úhyb %'],['shields','Štíty (break)'],['exp','Zkušenosti za zabití'],['money','Peníze za zabití']].map(([k,l])=>fld(c,'stats',{k,t:'num',l})).join('')}</div></div>
+ <div class="card"><h3>Slabiny (break systém)</h3>${WEAK.map(w=>`<span class="tag ${S.weaknesses.includes(w)?'on':''}" data-act="tog" data-path="stats.weaknesses" data-val="${w}">${WEAK_CZ[w]}</span>`).join('')}</div>
+ <div class="card"><h3>Kořist</h3><div class="grid">${fld(c,'stats',{k:'drops',t:'list',l:'Co padá',tpl:'drop',f:[{k:'item',l:'ID předmětu',t:'text'},{k:'chance',l:'Šance (0–1)',t:'num'}]})}</div></div>`}
+
+function tAnim(){const c=cur();return `
+<div class="drop" id="drop">Přetáhni sem PNG spritesheety. Název souboru = název animace (<code>walk.png</code>, <code>attack.png</code>…). Nebo přidej prázdnou kolonku níže.<br><br>
+<label class="btn">Vybrat soubory…<input type="file" id="fImgs" accept="image/png,image/*" multiple hidden></label></div>
+<div class="btns" style="padding:0 0 12px">${PRESETS.map(p=>`<button class="sm" data-act="addanim" data-name="${p}">+ ${p}</button>`).join('')}<button class="sm" data-act="addanim" data-name="">+ vlastní</button></div>
+<p class="hint">Formát sheetu: pro směry je každý směr jedna <b>řada</b>, snímky jdou zleva doprava. Bez směrů se snímky zalamují podle „Sloupců“.</p>
+${c.animations.map((a,i)=>animCard(a,i)).join('')||'<p class="hint">Zatím žádné animace.</p>'}`}
+function animCard(a,i){const c=cur(),b='animations.'+i;
+ const rows=ROWS[a.directions]||[];
+ return `<div class="card"><div class="anim"><div class="pv"><canvas data-pv="${i}" width="128" height="128"></canvas>
+ <div>${rows.map((r,d)=>`<button class="sm" data-act="dirpv" data-i="${i}" data-d="${d}">${r}</button>`).join(' ')}</div>
+ <div class="hint" style="color:#ddd">${a._img?`${a._img.naturalWidth}×${a._img.naturalHeight}px`:'bez obrázku'}</div></div>
+ <div><div class="grid">
+ <label class="f">Název animace<input type="text" list="presets" data-k="${b}.name" data-t="text"></label>
+ ${fld(c,b,{k:'frame_w',t:'num',l:'Šířka snímku'})}${fld(c,b,{k:'frame_h',t:'num',l:'Výška snímku'})}
+ ${fld(c,b,{k:'frames',t:'num',l:'Snímků'})}${fld(c,b,{k:'columns',t:'num',l:'Sloupců (jen bez směrů)'})}${fld(c,b,{k:'fps',t:'num',l:'FPS'})}
+ ${fld(c,b,{k:'directions',t:'sel',l:'Směry',o:DIRMODES,w:1})}${fld(c,b,{k:'loop',t:'bool',l:'Opakovat'})}</div>
+ <div class="btns" style="padding:10px 0 0"><button class="sm" data-act="pickimg" data-i="${i}">Nahradit obrázek</button><button class="sm" data-act="autoanim" data-i="${i}">Zjistit snímky a směry z obrázku</button><button class="sm del" data-act="rmanim" data-i="${i}">Smazat animaci</button></div></div></div></div>`}
+function tExport(){return `<div id="val"></div><div class="btns" style="padding:8px 0"><button class="pri" data-act="exp1">Exportovat tuto postavu (ZIP)</button><button id="bAll2">Exportovat všechny postavy (ZIP)</button></div><h3>character.json (náhled)</h3><pre id="json"></pre>`}
+
+// ====================== animace: obrázky ======================
+function loadImg(a,dataUrl,cb){a.data=dataUrl;const im=new Image();im.onload=()=>{a._img=im;cb&&cb()};im.src=dataUrl}
+function readFile(f){return new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)})}
+function autoDetect(a){const im=a._img;if(!im)return;const fw=a.frame_w||64,fh=a.frame_h||64;
+  const cols=Math.max(1,Math.floor(im.naturalWidth/fw)),rows=Math.max(1,Math.floor(im.naturalHeight/fh));
+  a.columns=cols;a.frames=cols;a.directions=({3:'3',4:'4',8:'8'})[rows]||'1';
+  if(a.directions==='1'){a.frames=cols*rows}}
+async function addFiles(files){const c=cur();if(!c)return;
+  for(const f of files){if(!f.type.startsWith('image/'))continue;
+    const name=slug(f.name.replace(/\.[^.]+$/,''));let a=c.animations.find(x=>x.name===name);
+    if(!a){a=newAnim(name,c.sprite.frame_w,c.sprite.frame_h);c.animations.push(a)}
+    a.file=name+'.png';const url=await readFile(f);await new Promise(r=>loadImg(a,url,r));autoDetect(a)}
+  mark();render()}
+function pickImage(i){const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=async()=>{const a=cur().animations[i],url=await readFile(inp.files[0]);await new Promise(r=>loadImg(a,url,r));a.file=slug(a.name)+'.png';autoDetect(a);mark();render()};inp.click()}
+function bindAnim(b){
+  const dz=$('#drop');
+  ['dragover','dragenter'].forEach(e=>dz.addEventListener(e,ev=>{ev.preventDefault();dz.classList.add('on')}));
+  ['dragleave','drop'].forEach(e=>dz.addEventListener(e,()=>dz.classList.remove('on')));
+  dz.addEventListener('drop',ev=>{ev.preventDefault();addFiles(ev.dataTransfer.files)});
+  $('#fImgs').onchange=e=>addFiles(e.target.files);
+  if(!$('#presets')){const d=document.createElement('datalist');d.id='presets';d.innerHTML=PRESETS.map(p=>`<option value="${p}">`).join('');document.body.appendChild(d)}
+}
+function rect(a,dir,f){const cols=Math.max(1,a.columns||1);
+  if((ROWS[a.directions]||[]).length===0)return [(f%cols)*a.frame_w,Math.floor(f/cols)*a.frame_h];
+  return [f*a.frame_w,dir*a.frame_h]}
+function drawFrame(cv,a,dir,f,fit){const g=cv.getContext('2d');g.imageSmoothingEnabled=false;g.clearRect(0,0,cv.width,cv.height);
+  if(!a._img||!a.frame_w||!a.frame_h)return;const [sx,sy]=rect(a,dir,f);
+  const s=Math.min(cv.width/a.frame_w,cv.height/a.frame_h);const w=a.frame_w*s,h=a.frame_h*s;
+  g.drawImage(a._img,sx,sy,a.frame_w,a.frame_h,(cv.width-w)/2,cv.height-h,w,h)}
+// jedna smyčka pro všechny náhledy
+let tick=0;setInterval(()=>{if(tab!=='anim'||!cur())return;
+  cur().animations.forEach((a,i)=>{const cv=document.querySelector(`canvas[data-pv="${i}"]`);if(!cv)return;
+    a._t=(a._t||0)+1000/60*0+1;const per=Math.max(1,Math.round(60/Math.max(1,a.fps)));
+    if(a._t>=per){a._t=0;a._f=((a._f||0)+1);const n=Math.max(1,a.frames);if(a._f>=n)a._f=a.loop?0:n-1}
+    drawFrame(cv,a,Math.min(a._dir||0,Math.max(0,(ROWS[a.directions]||[]).length-1)),a._f||0)})},1000/60);
+
+// ====================== kontrola ======================
+function exportObj(c){const o=JSON.parse(JSON.stringify(c,(k,v)=>(k.startsWith('_')||k==='data'||k==='use_stats')?undefined:v));
+  o.animations.forEach(a=>{a.file=slug(a.name)+'.png'});
+  if(!(COMBAT.includes(c.category)||c.use_stats))delete o.stats;
+  o.custom=Object.fromEntries((c.custom||[]).filter(x=>x.key).map(x=>[x.key,x.value]));
+  o.functions=JSON.parse(JSON.stringify(c.functions));
+  if(o.functions.patrol)o.functions.patrol.points=o.functions.patrol.points.split('\n').map(l=>l.split(',').map(Number)).filter(p=>p.length===2&&!p.some(isNaN));
+  return o}
+function validate(c){const m=[];const E=t=>m.push(['e',t]),W=t=>m.push(['w',t]);
+  if(!c.id||!/^[a-z0-9_]+$/.test(c.id))E('ID smí obsahovat jen a–z, 0–9 a podtržítko.');
+  if(chars.filter(x=>x.id===c.id).length>1)E('Stejné ID má víc postav.');
+  if(!c.animations.length)E('Žádná animace.');else if(!c.animations.some(a=>a.name==='idle'))W('Chybí animace „idle“ – hra pak nemá co zobrazit při stání.');
+  const names=new Set();
+  c.animations.forEach(a=>{const n=a.name;if(names.has(n))E(`Animace „${n}“ je dvakrát.`);names.add(n);
+    if(!a._img){E(`Animace „${n}“ nemá obrázek.`);return}
+    const rows=(ROWS[a.directions]||[]).length||Math.ceil(a.frames/Math.max(1,a.columns));
+    const need=[a.directions==='1'?Math.min(a.frames,a.columns)*a.frame_w:a.frames*a.frame_w,rows*a.frame_h];
+    if(need[0]>a._img.naturalWidth||need[1]>a._img.naturalHeight)E(`„${n}“: obrázek ${a._img.naturalWidth}×${a._img.naturalHeight} je menší než ${need[0]}×${need[1]} potřebné pro nastavení.`);
+    if(a._img.naturalWidth%a.frame_w||a._img.naturalHeight%a.frame_h)W(`„${n}“: rozměry obrázku nejsou násobkem velikosti snímku.`)});
+  if(c.functions.merchant&&!c.functions.merchant.items.length)W('Obchodník nemá žádné zboží.');
+  if(c.functions.dialog&&!c.functions.dialog.lines.length)W('Dialog nemá žádné věty.');
+  if(!m.length)m.push(['o','Vše v pořádku, postava je připravena k exportu.']);return m}
+function bindExport(){const c=cur();$('#val').innerHTML=validate(c).map(([t,x])=>`<div class="msg ${t}">${esc(x)}</div>`).join('');
+  $('#json').textContent=JSON.stringify(exportObj(c),null,2);$('#bAll2').onclick=()=>exportZip(chars)}
+
+// ====================== ZIP (store) ======================
+const CRC=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc32=b=>{let c=~0;for(let i=0;i<b.length;i++)c=CRC[(c^b[i])&255]^(c>>>8);return ~c>>>0};
+function buildZip(files){ // files: [{name,data:Uint8Array}]
+  const enc=new TextEncoder(),parts=[],cen=[];let off=0;
+  for(const f of files){const nm=enc.encode(f.name),crc=crc32(f.data),sz=f.data.length;
+    const lh=new DataView(new ArrayBuffer(30));lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);lh.setUint16(8,0,true);lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);lh.setUint16(26,nm.length,true);
+    parts.push(new Uint8Array(lh.buffer),nm,f.data);
+    const ch=new DataView(new ArrayBuffer(46));ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);ch.setUint32(16,crc,true);ch.setUint32(20,sz,true);ch.setUint32(24,sz,true);ch.setUint16(28,nm.length,true);ch.setUint32(42,off,true);
+    cen.push(new Uint8Array(ch.buffer),nm);off+=30+nm.length+sz}
+  const cs=cen.reduce((a,b)=>a+b.length,0),e=new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cs,true);e.setUint32(16,off,true);
+  return new Blob([...parts,...cen,new Uint8Array(e.buffer)],{type:'application/zip'})}
+async function readZip(buf){const u=new Uint8Array(buf),dv=new DataView(buf),out={};let p=u.length-22;
+  while(p>=0&&dv.getUint32(p,true)!==0x06054b50)p--;if(p<0)throw new Error('Není ZIP');
+  const n=dv.getUint16(p+10,true);let q=dv.getUint32(p+16,true);
+  for(let i=0;i<n;i++){const m=dv.getUint16(q+10,true),cs=dv.getUint32(q+20,true),nl=dv.getUint16(q+28,true),el=dv.getUint16(q+30,true),cl=dv.getUint16(q+32,true),lo=dv.getUint32(q+42,true);
+    const name=new TextDecoder().decode(u.subarray(q+46,q+46+nl));const ln=dv.getUint16(lo+26,true),le=dv.getUint16(lo+28,true),ds=lo+30+ln+le;
+    let d=u.slice(ds,ds+cs);
+    if(m===8){const s=new Blob([d]).stream().pipeThrough(new DecompressionStream('deflate-raw'));d=new Uint8Array(await new Response(s).arrayBuffer())}
+    out[name]=d;q+=46+nl+el+cl}return out}
+const dataToBytes=url=>{const b=atob(url.split(',')[1]);const u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u};
+function bytesToDataUrl(u){let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return 'data:image/png;base64,'+btoa(s)}
+function zipFiles(list){const enc=new TextEncoder(),files=[];
+  for(const c of list){files.push({name:`characters/${c.id}/character.json`,data:enc.encode(JSON.stringify(exportObj(c),null,2))});
+    files.push({name:`characters/${c.id}/_editor.json`,data:enc.encode(JSON.stringify(c,(k,v)=>(k.startsWith('_')&&k!=='_idAuto')||k==='data'?undefined:v))});
+    c.animations.forEach(a=>{if(a.data)files.push({name:`characters/${c.id}/${slug(a.name)}.png`,data:dataToBytes(a.data)})})}
+  return files}
+function exportZip(list){
+  const bad=list.filter(c=>validate(c).some(m=>m[0]==='e'));
+  if(bad.length&&!confirm('Postavy s chybami: '+bad.map(c=>c.name).join(', ')+'\nExportovat i tak?'))return;
+  const blob=buildZip(zipFiles(list)),a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=(list.length===1?list[0].id:'postavy')+'.zip';a.click();dirty=false}
+async function importZip(buf){const files=await readZip(buf),byId={};
+  for(const [n,d] of Object.entries(files)){const m=n.match(/^characters\/([^/]+)\/(.+)$/);if(m)(byId[m[1]]??={})[m[2]]=d}
+  for(const [id,f] of Object.entries(byId)){const src=f['_editor.json']||f['character.json'];if(!src)continue;
+    const c=Object.assign(newChar(),JSON.parse(new TextDecoder().decode(src)));c._idAuto=false;
+    if(!f['_editor.json']){ // jen character.json: převést zpět
+      c.custom=Object.entries(c.custom||{}).map(([key,value])=>({key,value}));c.stats=Object.assign(newStats(),c.stats||{});
+      if(c.functions.patrol&&Array.isArray(c.functions.patrol.points))c.functions.patrol.points=c.functions.patrol.points.join('\n')}
+    c.animations=c.animations.map(a=>Object.assign(newAnim(a.name,a.frame_w,a.frame_h),a,{data:'',_img:null}));
+    for(const a of c.animations){const png=f[slug(a.name)+'.png'];if(png)await new Promise(r=>loadImg(a,bytesToDataUrl(png),r))}
+    const ex=chars.findIndex(x=>x.id===c.id);ex>=0?chars[ex]=c:chars.push(c);sel=chars.indexOf(c)}
+  render()}
+
+// ====================== start ======================
+function addChar(){const c=newChar();let n=1,id=c.id;while(chars.some(x=>x.id===id))id=c.id+'_'+(++n);c.id=id;chars.push(c);sel=chars.length-1;tab='base';mark();render()}
+$('#bNew').onclick=addChar;
+$('#bDup').onclick=()=>{const c=cur();if(!c)return;const d=JSON.parse(JSON.stringify(c,(k,v)=>k==='data'||k==='_img'?undefined:v));
+  d.animations.forEach((a,i)=>{a.data=c.animations[i].data;a._img=c.animations[i]._img});d.name+=' (kopie)';d.id=c.id+'_kopie';d._idAuto=false;chars.push(d);sel=chars.length-1;mark();render()};
+$('#fZip').onchange=async e=>{try{await importZip(await e.target.files[0].arrayBuffer())}catch(x){alert('Nelze načíst ZIP: '+x.message)}e.target.value=''};
+$('#bAll').onclick=()=>chars.length&&exportZip(chars);
+render();
+</script></body></html>

@@ -116,7 +116,12 @@ func _build_dock() -> void:
 	_status = _label("")
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_dock.add_child(_status)
+	_dock.add_child(HSeparator.new())
+	_dock.add_child(_label("4) POSTAVY"))
+	_dock.add_child(_btn("Importovat ZIP z res://incoming", _import_zips))
+	_dock.add_child(_label("ZIP z tvůrce postav hoď do složky incoming – naimportuje se sám."))
 	_refresh_lists()
+	EditorInterface.get_resource_filesystem().filesystem_changed.connect(_import_zips)
 
 func _refresh_lists() -> void:
 	_map_opt.clear()
@@ -380,3 +385,40 @@ func _assign_texture() -> void:
 		sm.set_shader_parameter("pixel_filter", _tex_pixel.button_pressed)
 		ResourceSaver.save(sm, TERRAIN_MAT)
 		_say("Terén: textura '%s' nastavena (%s)." % [tex.resource_path.get_file(), param])
+
+# ---------------------------------------------------------------- postavy (ZIP z tvůrce postav)
+
+var _importing := false
+
+func _import_zips() -> void:
+	if _importing:
+		return
+	var zips: Array[String] = []
+	for f in DirAccess.get_files_at("res://incoming/"):
+		if f.get_extension().to_lower() == "zip":
+			zips.append(f)
+	if zips.is_empty():
+		return
+	_importing = true
+	var chars := []
+	for f in zips:
+		var z := ZIPReader.new()
+		if z.open("res://incoming/" + f) != OK:
+			_say("Nelze otevřít " + f)
+			continue
+		for path in z.get_files():
+			if not path.begins_with("characters/") or path.ends_with("/") or ".." in path or path.ends_with("_editor.json"):
+				continue
+			var dst := "res://" + path
+			DirAccess.make_dir_recursive_absolute(dst.get_base_dir())
+			var fa := FileAccess.open(dst, FileAccess.WRITE)
+			if fa:
+				fa.store_buffer(z.read_file(path))
+				fa.close()
+			if path.ends_with("character.json"):
+				chars.append(path.get_base_dir().get_file())
+		z.close()
+		DirAccess.rename_absolute("res://incoming/" + f, "res://incoming/" + f + ".done")
+	_say("Naimportované postavy: " + ", ".join(chars))
+	EditorInterface.get_resource_filesystem().scan()
+	_importing = false
