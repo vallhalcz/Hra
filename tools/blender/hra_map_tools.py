@@ -54,6 +54,26 @@ class HRA_OT_layers(bpy.types.Operator):
             m.diffuse_color = (*c, 1)
         return {"FINISHED"}
 
+class HRA_OT_texture(bpy.types.Operator):
+    bl_idname = "hra.assign_texture"; bl_label = "Přiřadit texturu výběru"; bl_options = {"REGISTER", "UNDO"}
+    filepath: bpy.props.StringProperty(subtype="FILE_PATH")
+    def invoke(self, ctx, ev):
+        ctx.window_manager.fileselect_add(self); return {"RUNNING_MODAL"}
+    def execute(self, ctx):
+        img = bpy.data.images.load(self.filepath, check_existing=True)
+        name = os.path.splitext(os.path.basename(self.filepath))[0]
+        m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+        m.use_nodes = True
+        nt = m.node_tree
+        tex = nt.nodes.get("HraTex") or nt.nodes.new("ShaderNodeTexImage")
+        tex.name = "HraTex"; tex.image = img; tex.interpolation = "Closest" if ctx.scene.hra_pixel else "Linear"
+        bsdf = nt.nodes.get("Principled BSDF")
+        nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+        for o in ctx.selected_objects:
+            if o.type == "MESH":
+                o.data.materials.clear(); o.data.materials.append(m)
+        return {"FINISHED"}
+
 class HRA_OT_export(bpy.types.Operator):
     bl_idname = "hra.export"; bl_label = "Exportovat GLB do Godot projektu"
     def execute(self, ctx):
@@ -77,21 +97,23 @@ class HRA_PT_panel(bpy.types.Panel):
         for p in ("Terrain", "SOLID_", "COL_"):
             r.operator("hra.prefix", text=p.strip("_")).prefix = p
         l.operator("hra.scatter_from_selection")
+        l.prop(sc, "hra_pixel"); l.operator("hra.assign_texture")
         l.operator("hra.add_spawn"); l.operator("hra.add_exit")
         l.separator()
         l.prop(sc, "hra_project_dir"); l.prop(sc, "hra_map_id")
         l.operator("hra.export")
 
-CLASSES = (HRA_OT_spawn, HRA_OT_exit, HRA_OT_scatter, HRA_OT_prefix, HRA_OT_layers, HRA_OT_export, HRA_PT_panel)
+CLASSES = (HRA_OT_texture, HRA_OT_spawn, HRA_OT_exit, HRA_OT_scatter, HRA_OT_prefix, HRA_OT_layers, HRA_OT_export, HRA_PT_panel)
 
 def register():
     for c in CLASSES: bpy.utils.register_class(c)
     bpy.types.Scene.hra_project_dir = bpy.props.StringProperty(name="Složka projektu", subtype="DIR_PATH")
+    bpy.types.Scene.hra_pixel = bpy.props.BoolProperty(name="Pixel-art (ostré)", default=False)
     bpy.types.Scene.hra_map_id = bpy.props.StringProperty(name="ID mapy", default="uvod")
 
 def unregister():
     for c in reversed(CLASSES): bpy.utils.unregister_class(c)
-    del bpy.types.Scene.hra_project_dir, bpy.types.Scene.hra_map_id
+    del bpy.types.Scene.hra_pixel, bpy.types.Scene.hra_project_dir, bpy.types.Scene.hra_map_id
 
 if __name__ == "__main__":
     register()

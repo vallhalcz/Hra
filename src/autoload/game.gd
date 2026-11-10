@@ -34,10 +34,11 @@ func setup(p_holder: Node3D, p_player: Player, p_camera: Hd2dCamera) -> void:
 	camera = p_camera
 
 func map_path(id: String) -> String:
-	for e in EXTS:
-		var p := "res://assets/maps/%s%s" % [id, e]
-		if ResourceLoader.exists(p):
-			return p
+	for base in ["res://maps/", "res://assets/maps/"]:
+		for e in EXTS:
+			var p := "%s%s%s" % [base, id, e]
+			if ResourceLoader.exists(p):
+				return p
 	return ""
 
 ## Zavolej, když se hráč blíží k exitu — mapa se načte na pozadí a přechod je pak okamžitý.
@@ -68,6 +69,10 @@ func change_map(id: String, spawn_id := "start", fade := true) -> void:
 	current_map = scene.instantiate()
 	current_id = id
 	holder.add_child(current_map)
+	for c in current_map.get_children():  # metadata z importované mapy uvnitř wrapper scény
+		for k in c.get_meta_list():
+			if not current_map.has_meta(k):
+				current_map.set_meta(k, c.get_meta(k))
 	_wire_exits()
 	var sp := current_map.find_child("SPAWN_" + spawn_id, true, false) as Node3D
 	player.global_position = (sp.global_position if sp else Vector3.ZERO) + Vector3(0, 0.05, 0)

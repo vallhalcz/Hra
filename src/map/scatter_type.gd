@@ -13,3 +13,4 @@ extends Resource
 @export var wind_strength := 0.05
 @export var y_offset := 0.0
 @export var seed := 0
+@export_enum("none", "G0", "G1", "G2", "G3") var auto_layer := "none"  ## automaticky pokrývá vrstvu terénu (např. trávu na G0)

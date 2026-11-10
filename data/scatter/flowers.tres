@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="ScatterType" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://src/map/scatter_type.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+density = 1.5
+tint_a = Color(1, 0.9, 0.5, 1)
+tint_b = Color(1, 0.6, 0.7, 1)

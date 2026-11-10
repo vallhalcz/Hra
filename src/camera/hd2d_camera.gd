@@ -1,16 +1,20 @@
 class_name Hd2dCamera
 extends Camera3D
 ## Pevná kamera jako v Octopath: žádné otáčení, jen sleduje hráče.
-## Pohled (úhel, vzdálenost, FOV) se bere z kamery v Blenderu (metadata mapy).
+## Pohled je pevný preset ve stylu Octopath (nízký sklon, úzké FOV = "teleobjektiv", plochá perspektiva).
+## Kamera z Blenderu se ignoruje. Ladění: pitch_deg / distance / fov_deg níže (jedno místo pro celou hru).
 ## Tilt-shift efekt = DoF (rozostření blízko a daleko od ohniskové vzdálenosti).
 
 @export var target: Node3D
+@export_range(10.0, 60.0) var pitch_deg := 32.0   ## sklon dolů; větší = víc "shora"
+@export_range(8.0, 40.0) var distance := 18.0     ## vzdálenost od hráče (m)
+@export_range(10.0, 60.0) var fov_deg := 25.0     ## úzké FOV = plošší, "diorama" vzhled
 @export var follow_speed := 8.0
 @export var edge_margin := Vector2(6.0, 4.0)  ## kolik metrů od okraje mapy se focus zastaví (X, Z)
 @export var dof_range := 9.0
 @export var dof_transition := 10.0
 
-var offset := Vector3(0, 23.1, 27.6)
+var offset := Vector3.ZERO
 var bounds := AABB()
 var has_bounds := false
 var _focus := Vector3.ZERO
@@ -18,11 +22,10 @@ var _focus := Vector3.ZERO
 func _ready() -> void:
 	attributes = CameraAttributesPractical.new()
 	attributes.dof_blur_amount = 0.08
-	look_at_from_position(offset, Vector3.ZERO)
+	_update_view()
 
 func apply_map(map: Node) -> void:
-	offset = map.get_meta("cam_offset", offset)
-	fov = map.get_meta("cam_fov", fov)
+	_update_view()
 	has_bounds = map.has_meta("bounds")
 	if has_bounds:
 		bounds = map.get_meta("bounds")
@@ -57,3 +60,9 @@ func _clamped(p: Vector3) -> Vector3:
 
 func _place() -> void:
 	global_position = _focus + offset
+
+func _update_view() -> void:
+	var p := deg_to_rad(pitch_deg)
+	offset = Vector3(0, sin(p), cos(p)) * distance
+	fov = fov_deg
+	rotation = Vector3(-p, 0, 0)

@@ -228,6 +228,7 @@ static func _build_terrain(root: Node, n: Node3D) -> AABB:
 				aabb = aabb.expand(p)
 	_set_surfaces(n, surfs)
 	_add_body(root, n, surfs)
+	_auto_scatter(root, n, surfs)
 	return n.transform * aabb
 
 # ---------- exit ----------
@@ -253,35 +254,71 @@ static func _build_exit(root: Node, n: Node3D) -> void:
 
 # ---------- scatter ----------
 
-static func _bake_scatter(root: Node, n: Node3D) -> void:
-	var type := _clean(String(n.name)).trim_prefix("SCATTER_")
+static func _load_cfg(type: String) -> ScatterType:
 	var path := SCATTER_DIR + type + ".tres"
-	var cfg: ScatterType = load(path) if ResourceLoader.exists(path) else ScatterType.new()
+	return load(path) if ResourceLoader.exists(path) else ScatterType.new()
+
+static func _bake_scatter(root: Node, n: Node3D) -> void:
+	var cfg := _load_cfg(_clean(String(n.name)).trim_prefix("SCATTER_"))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(String(n.name)) + cfg.seed
+	var r := _sample(_surfaces(n), cfg, rng, -1)
+	_swap(root, n, DetailLayer.make_instance(cfg, r[0], r[1]))
 
+## Automatické doplnění detailů (tráva...) podle vah vrstev terénu.
+static func _auto_scatter(root: Node, terrain: Node3D, surfs: Array) -> void:
+	var dir := DirAccess.open(SCATTER_DIR)
+	if dir == null:
+		return
+	for f in dir.get_files():
+		if not f.ends_with(".tres"):
+			continue
+		var cfg: ScatterType = load(SCATTER_DIR + f)
+		var ch := ["G0", "G1", "G2", "G3"].find(cfg.auto_layer)
+		if ch < 0:
+			continue
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash(f) + cfg.seed
+		var r := _sample(surfs, cfg, rng, ch)
+		var mmi := DetailLayer.make_instance(cfg, r[0], r[1])
+		var p := terrain.get_parent()
+		p.add_child(mmi)
+		mmi.name = "Auto_" + f.get_basename()
+		mmi.transform = terrain.transform
+		mmi.owner = root
+
+## Vrací [Array[Transform3D], Array[Color]]. channel >= 0: hustota se násobí váhou té vrstvy terénu.
+static func _sample(surfs: Array, cfg: ScatterType, rng: RandomNumberGenerator, channel: int) -> Array:
 	var xforms: Array[Transform3D] = []
 	var cols: Array[Color] = []
-	for s in _surfaces(n):
+	for s in surfs:
 		var v: PackedVector3Array = s.arrays[Mesh.ARRAY_VERTEX]
+		var vc = s.arrays[Mesh.ARRAY_COLOR]
 		var idx = s.arrays[Mesh.ARRAY_INDEX]
-		var tri_count: int = (idx.size() if (idx != null and idx.size() > 0) else v.size()) / 3
+		var indexed: bool = idx != null and idx.size() > 0
+		var tri_count: int = (idx.size() if indexed else v.size()) / 3
 		for t in tri_count:
 			var ia := t * 3
-			var a: Vector3; var b: Vector3; var c: Vector3
-			if idx != null and idx.size() > 0:
-				a = v[idx[ia]]; b = v[idx[ia + 1]]; c = v[idx[ia + 2]]
-			else:
-				a = v[ia]; b = v[ia + 1]; c = v[ia + 2]
+			var ids := [idx[ia], idx[ia + 1], idx[ia + 2]] if indexed else [ia, ia + 1, ia + 2]
+			var a: Vector3 = v[ids[0]]
+			var b: Vector3 = v[ids[1]]
+			var c: Vector3 = v[ids[2]]
 			var cr := (b - a).cross(c - a)
 			var area := cr.length() * 0.5
 			if area < 0.0001 or absf(cr.normalized().y) < cfg.min_normal_y:
 				continue
-			var expected := area * cfg.density
+			var wgt := 1.0
+			if channel >= 0:
+				if vc == null or vc.size() == 0:
+					continue
+				wgt = (vc[ids[0]][channel] + vc[ids[1]][channel] + vc[ids[2]][channel]) / 3.0
+				if wgt < 0.35:
+					continue
+			var expected := area * cfg.density * wgt
 			var count := int(expected) + (1 if rng.randf() < fmod(expected, 1.0) else 0)
 			for k in count:
 				if xforms.size() >= MAX_INSTANCES:
-					break
+					return [xforms, cols]
 				var r1 := sqrt(rng.randf())
 				var r2 := rng.randf()
 				var p := a * (1.0 - r1) + b * (r1 * (1.0 - r2)) + c * (r1 * r2)
@@ -289,36 +326,5 @@ static func _bake_scatter(root: Node, n: Node3D) -> void:
 				var sc := rng.randf_range(cfg.scale_range.x, cfg.scale_range.y)
 				xforms.append(Transform3D(Basis.from_scale(Vector3(sc, sc, sc)), p))
 				cols.append(cfg.tint_a.lerp(cfg.tint_b, rng.randf()))
+	return [xforms, cols]
 
-	var tex: Texture2D = cfg.texture if cfg.texture else _placeholder()
-	var quad := QuadMesh.new()
-	var size := Vector2(tex.get_width(), tex.get_height()) / PPU
-	quad.size = size
-	quad.center_offset = Vector3(0, size.y * 0.5, 0)  # pivot dole uprostřed
-	var sm := ShaderMaterial.new()
-	sm.shader = load(SPRITE_SHADER)
-	sm.set_shader_parameter("albedo_tex", tex)
-	sm.set_shader_parameter("wind_strength", cfg.wind_strength)
-	quad.material = sm
-
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = quad
-	mm.instance_count = xforms.size()
-	for i in xforms.size():
-		mm.set_instance_transform(i, xforms[i])
-		mm.set_instance_color(i, cols[i])
-	var mmi := MultiMeshInstance3D.new()
-	mmi.multimesh = mm
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_swap(root, n, mmi)
-
-static func _placeholder() -> Texture2D:
-	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-	for x in range(2, 14):
-		var h := 6 + (x * 7) % 9
-		for y in range(16 - h, 16):
-			img.set_pixel(x, y, Color(0.35 + 0.02 * (y % 5), 0.65, 0.25))
-	return ImageTexture.create_from_image(img)

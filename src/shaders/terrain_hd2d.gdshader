@@ -15,7 +15,8 @@ uniform vec4 tint1 : source_color = vec4(0.52, 0.70, 0.30, 1.0);
 uniform vec4 tint2 : source_color = vec4(0.62, 0.52, 0.34, 1.0);
 uniform vec4 tint3 : source_color = vec4(0.34, 0.50, 0.22, 1.0);
 uniform vec4 tint_cliff : source_color = vec4(0.45, 0.40, 0.36, 1.0);
-uniform float tiles_per_meter = 0.25;
+uniform float tiles_per_meter = 0.25;  // 1 / velikost dlaždice v metrech (4 m => 0.25)
+uniform bool pixel_filter = false;     // true = pixel-art textura (ostré texely, bez vyhlazení)
 
 group_uniforms blending;
 uniform float edge_softness : hint_range(0.01, 0.5) = 0.28;
@@ -32,6 +33,14 @@ uniform float detail_strength : hint_range(0.0, 0.5) = 0.08;
 
 varying vec3 wpos;
 varying vec3 wnrm;
+
+vec3 samp(sampler2D t, vec2 uv) {
+	if (pixel_filter) {
+		vec2 sz = vec2(textureSize(t, 0));
+		return textureLod(t, (floor(uv * sz) + 0.5) / sz, 0.0).rgb;
+	}
+	return texture(t, uv).rgb;
+}
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vnoise(vec2 p) {
@@ -63,17 +72,17 @@ void fragment() {
 	float slope = 1.0 - clamp(wnrm.y, 0.0, 1.0);
 	cliff_w = max(cliff_w, smoothstep(slope_cliff_start, slope_cliff_end, slope));
 
-	vec3 c = texture(tex0, uv).rgb * tint0.rgb * w.r
-		+ texture(tex1, uv * 1.13).rgb * tint1.rgb * w.g
-		+ texture(tex2, uv * 0.93).rgb * tint2.rgb * w.b
-		+ texture(tex3, uv * 1.21).rgb * tint3.rgb * w.a;
+	vec3 c = samp(tex0, uv) * tint0.rgb * w.r
+		+ samp(tex1, uv * 1.13) * tint1.rgb * w.g
+		+ samp(tex2, uv * 0.93) * tint2.rgb * w.b
+		+ samp(tex3, uv * 1.21) * tint3.rgb * w.a;
 	c /= max(sum, 0.001);
 
 	// útes: dvě roviny podle normály (bez natažení textury na svahu)
 	vec3 an = abs(wnrm);
-	vec3 cl = texture(tex_cliff, wpos.xy * tiles_per_meter).rgb * an.z
-		+ texture(tex_cliff, wpos.zy * tiles_per_meter).rgb * an.x
-		+ texture(tex_cliff, wpos.xz * tiles_per_meter).rgb * an.y;
+	vec3 cl = samp(tex_cliff, wpos.xy * tiles_per_meter) * an.z
+		+ samp(tex_cliff, wpos.zy * tiles_per_meter) * an.x
+		+ samp(tex_cliff, wpos.xz * tiles_per_meter) * an.y;
 	cl = cl / max(an.x + an.y + an.z, 0.001) * tint_cliff.rgb;
 	c = mix(c, cl, cliff_w);
 

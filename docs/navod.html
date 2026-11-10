@@ -1,0 +1,128 @@
+<!doctype html><html lang="cs"><meta charset="utf-8"><title>Hra – návod</title>
+<style>
+@page{size:A4;margin:18mm 16mm}
+body{font:11pt/1.5 "DejaVu Sans",Arial,sans-serif;color:#222}
+h1{font-size:24pt;margin:0 0 4pt;color:#2d5a1e}h2{font-size:15pt;color:#2d5a1e;border-bottom:2px solid #b8d8a0;padding-bottom:3pt;margin-top:22pt;break-after:avoid}
+h3{font-size:12pt;margin:14pt 0 4pt}code{background:#f0f0ea;padding:1pt 4pt;border-radius:3pt;font-size:10pt}
+table{border-collapse:collapse;width:100%;margin:8pt 0;font-size:10pt}td,th{border:1px solid #ccc;padding:4pt 6pt;vertical-align:top}th{background:#eef5e8;text-align:left}
+.box{background:#fff8e1;border-left:4px solid #e0a800;padding:6pt 10pt;margin:8pt 0}.ok{background:#eef8ea;border-left-color:#4a9a2a}
+ol li,ul li{margin:3pt 0}.sub{color:#666;margin-bottom:16pt}
+</style>
+<h1>Hra – HD-2D v Godotu 4.7</h1><div class="sub">Návod k práci: Blender → Godot → malování detailů. Repo: github.com/vallhalcz/Hra</div>
+
+<h2>1. Jak to celé funguje</h2>
+<p>Postup je vždy stejný a má tři kroky:</p>
+<ol>
+<li><b>Blender</b> – postavíš mapu (terén, kameny, stan…), pojmenuješ objekty podle pravidel a jedním tlačítkem exportuješ <code>.glb</code>.</li>
+<li><b>Godot (automaticky)</b> – plugin soubor při importu sám zpracuje: kolize, terénní shader, spawny, exity a automaticky nasází trávu.</li>
+<li><b>Godot (ručně, volitelně)</b> – štětcem dodáš drobnosti (kytky, kameny, trsy) a přiřadíš textury.</li>
+</ol>
+<div class="box ok"><b>Co dělá co:</b> Blender = tvar světa a pravidla (kde je zem, kolize, přechody). Godot dock „Hra“ = finální vzhled (textury, detaily). Nic se nemusí psát ručně.</div>
+<p>Mapy jsou malé scény; při vstupu do exitu se obrazovka rychle (0,18 s) zatmí a načte se další mapa. Sousední mapy se načítají na pozadí, takže přechod je skoro okamžitý.</p>
+
+<h2>2. Instalace (jednou)</h2>
+<ol>
+<li>Stáhni projekt z GitHubu (<code>git clone https://github.com/vallhalcz/Hra</code>) a otevři složku v <b>Godotu 4.7</b> (Import → project.godot).</li>
+<li>Project → Project Settings → Plugins → zapni <b>Hra Tools</b> (měl by být zapnutý sám). Vpravo dole se objeví dock <b>Hra</b>.</li>
+<li>V Blenderu: Edit → Preferences → Add-ons → Install → vyber <code>tools/blender/hra_map_tools.py</code> a zaškrtni. V 3D okně stiskni <b>N</b> → záložka <b>Hra</b>.</li>
+</ol>
+
+<h2>3. Blender: stavba mapy</h2>
+<h3>Měřítko</h3>
+<p><b>1 jednotka = 1 metr.</b> Postava má 64 px na výšku = 1 m. Terén ukládej do jednoho objektu.</p>
+<h3>Pojmenování objektů (panel Hra to dělá tlačítky)</h3>
+<table>
+<tr><th>Název</th><th>Co to je</th></tr>
+<tr><td><code>Terrain</code></td><td>Země. Dostane terénní shader a kolizi.</td></tr>
+<tr><td><code>SOLID_nazev</code></td><td>Viditelný objekt, do kterého se nedá vejít (stan, sud, skála).</td></tr>
+<tr><td><code>COL_nazev</code></td><td>Neviditelná zeď/kolize.</td></tr>
+<tr><td><code>SCATTER_grass</code></td><td>Plocha, kam se rozsype sprite typu „grass“. Zobrazí se jako dráty.</td></tr>
+<tr><td><code>SPAWN_start</code></td><td>Empty (šipka) – kde se objeví hráč. Každá mapa potřebuje <code>SPAWN_start</code>.</td></tr>
+<tr><td><code>EXIT_les__start</code></td><td>Empty (kostka) – po vstupu přejdeš do mapy <code>les</code> na <code>SPAWN_start</code>. Velikost = měřítko (Scale) empty objektu.</td></tr>
+<tr><td><code>Sprite_*</code>, <code>REF_*</code></td><td>Reference pro tebe (např. 64px panáček). Při importu se smažou.</td></tr>
+</table>
+<h3>Malování země (vrstvy G0–G3, Cliff)</h3>
+<ol>
+<li>Klikni <b>Vytvořit materiály G0–G3 + Cliff</b>.</li>
+<li>Terén přiřaď materiály po plochách (Edit Mode → vyber plochy → přiřaď materiál). G0 = hlavní tráva, G1–G3 = další půda (cesta, jiná tráva, hlína), Cliff = skála.</li>
+<li>Nemusíš dělat hladké přechody – hranice se v Godotu automaticky rozmažou a zašumí. Strmé svahy se samy změní na skálu.</li>
+</ol>
+<div class="box">Alternativa: pokud terén vymaluješ v Blenderu <b>vertex color</b> (R=G0, G=G1, B=G2, A=G3), použije se ten. Pak se váhy nesvařují, takže máš přesnou kontrolu.</div>
+<h3>Textury v Blenderu (volitelné)</h3>
+<p>U objektů (stan, sud…): vyber je → <b>Přiřadit texturu výběru</b> → vyber obrázek. Hotové. (Textury terénu se řeší až v Godotu, viz 5.)</p>
+<h3>Export</h3>
+<p>V panelu Hra vyplň <b>Složku projektu</b> (kořen Godot projektu) a <b>ID mapy</b> (např. <code>uvod</code>), klikni <b>Exportovat GLB</b>. Soubor skončí v <code>assets/maps/uvod.glb</code>. Godot ho sám znovu zpracuje, jakmile se do něj vrátíš.</p>
+<div class="box"><b>Kamera z Blenderu se ignoruje.</b> Pohled určuje jedno společné nastavení ve hře (viz 7), aby byly všechny mapy stejné jako v Octopath.</div>
+
+<h2>4. Godot: první spuštění mapy</h2>
+<ol>
+<li>Počkej, až Godot dokončí import <code>assets/maps/uvod.glb</code>.</li>
+<li>Spusť hru (F5). Pohyb: WASD / šipky / gamepad.</li>
+<li>Pokud chceš přidávat ručně malované detaily: v docku <b>Hra → 1) Nová mapa</b> vyber soubor a klikni <b>Vytvořit scénu mapy</b>. Vznikne <code>res://maps/uvod.tscn</code> (obsahuje import + uzel <code>Details</code>). Hra od teď používá tuto scénu místo samotného GLB. Když znovu exportuješ z Blenderu, scéna se aktualizuje a tvé ručně malované detaily zůstanou.</li>
+</ol>
+
+<h2>5. Textury terénu (tráva a spol.)</h2>
+<h3>Jakou velikost?</h3>
+<table>
+<tr><th>Styl</th><th>Velikost</th><th>Nastavení</th></tr>
+<tr><td>Malovaná / hladká textura (doporučeno)</td><td><b>512×512</b> nebo 1024×1024 px, <b>bezešvá</b> (tileable), mocnina dvou</td><td>Jedna dlaždice pokryje 4 m (<code>tiles_per_meter = 0.25</code>).</td></tr>
+<tr><td>Pixel-art země</td><td>64×64 nebo 128×128 px (64 px = 1 m jako postava)</td><td>Zaškrtni „Pixel-art“; <code>tiles_per_meter = 1</code> (64 px) nebo <code>0.5</code> (128 px).</td></tr>
+</table>
+<p>24×24 px je moc málo na rozumný detail – bude to vypadat jako rozmazaná barva. Zelená tráva bez detailů je v pořádku, detaily jí dodají sprity (viz 6) a šum v shaderu.</p>
+<h3>Jak ji přiřadit (dock Hra → 3) Textura)</h3>
+<ol>
+<li>Přetáhni obrázek do pole textury (nebo ho vyber).</li>
+<li>Vyber cíl: <b>Terén: G0 (tráva)</b>, G1, G2, G3 nebo Cliff – nebo <b>Vybraný objekt</b> (nejdřív ho klikni ve Scene panelu).</li>
+<li>Klikni <b>Přiřadit texturu</b>. U objektu se uloží materiál do <code>data/materials/auto/</code>.</li>
+</ol>
+<h3>Jemné doladění vzhledu</h3>
+<p>Otevři <code>data/materials/terrain.tres</code> → Shader Parameters:</p>
+<ul>
+<li><b>tint0–3</b> – barevný nádech vrstvy (násobí se s texturou).</li>
+<li><b>edge_softness, edge_noise</b> – jak měkké a rozedrané jsou přechody mezi vrstvami.</li>
+<li><b>macro_strength</b> – velké světlejší/tmavší skvrny (proti „plastovému“ vzhledu).</li>
+<li><b>detail_strength</b> – jemná variace barvy.</li>
+</ul>
+
+<h2>6. Detaily: tráva, kameny, kytky</h2>
+<h3>A) Automaticky (post-processing)</h3>
+<p>Typ detailu s <code>auto_layer = G0</code> (v <code>data/scatter/grass.tres</code>) se při importu sám rozsype po celé vrstvě G0, hustě podle políček terénu. Nemusíš nic malovat.</p>
+<h3>B) Plochy z Blenderu</h3>
+<p>Plocha pojmenovaná <code>SCATTER_flowers</code> se osype typem <code>flowers</code>.</p>
+<h3>C) Ručně štětcem v Godotu (finální úpravy)</h3>
+<ol>
+<li>Otevři <code>res://maps/uvod.tscn</code>.</li>
+<li>Dock Hra → <b>2) Detaily</b>: vyber typ a klikni <b>Nová vrstva detailů v mapě</b>.</li>
+<li>Vrstva je vybraná – <b>levé tlačítko myši maluje na terénu</b> v 3D pohledu. Žlutý kruh = štětec.</li>
+<li><b>Shift + LMB</b> (nebo přepínač Guma) maže. Posuvníky mění velikost a hustotu. Ctrl+Z funguje.</li>
+<li>Chceš vybrat jiný uzel? Vypni „Štětec aktivní“.</li>
+</ol>
+<h3>Nový typ detailu</h3>
+<p>V <code>data/scatter</code> klikni pravým → New Resource → <b>ScatterType</b> → ulož jako <code>nazev.tres</code>. Nastav <b>texture</b> (PNG s průhledností, velikost v metrech = px / 64), <b>density</b> (kusů na m²), <b>scale_range</b>, <b>tint_a/tint_b</b> (náhodný odstín), <b>wind_strength</b> (vlnění). Sprity jsou vždy svislé a čelem ke kameře.</p>
+<div class="box">Tip: trsy trávy 16×16 až 32×32 px s průhledností, husté (5–10 ks/m²), v několika variantách odstínů. Čím víc malých kusů, tím „živější“ země.</div>
+
+<h2>7. Kamera jako Octopath</h2>
+<p>Přesná čísla Octopath Traveler nejsou zveřejněná, proto je to <b>preset</b> odvozený z vizuální analýzy: nízký sklon, úzké zorné pole (plochá „diorama“ perspektiva) a rozostření nahoře i dole (tilt-shift). Výchozí hodnoty: sklon <b>32°</b>, vzdálenost <b>18 m</b>, FOV <b>25°</b>.</p>
+<p>Ladění: v <code>src/camera/hd2d_camera.gd</code> přepiš výchozí hodnoty <code>pitch_deg</code>, <code>distance</code>, <code>fov_deg</code> (nahoře v souboru). Hodnoty platí pro všechny mapy. Až budeš mít referenční screenshot z Octopathu, doladíme je přesně.</p>
+<p>Kamera se neotáčí, jen plynule sleduje hráče a u okraje mapy se zastaví.</p>
+
+<h2>8. Rychlý checklist nové mapy</h2>
+<ol>
+<li>Blender: terén (<code>Terrain</code>) + materiály G0–G3/Cliff.</li>
+<li><code>SPAWN_start</code>, případně <code>EXIT_dalsi__start</code>.</li>
+<li>Kolize: <code>SOLID_</code> / <code>COL_</code> na všechno, co blokuje.</li>
+<li>Export GLB → Godot → <b>Vytvořit scénu mapy</b>.</li>
+<li>Textury (dock Hra), detaily štětcem.</li>
+<li>F5.</li>
+</ol>
+
+<h2>9. Když něco nejde</h2>
+<table>
+<tr><th>Problém</th><th>Řešení</th></tr>
+<tr><td>Hráč propadá zemí</td><td>Objekt se nejmenuje <code>Terrain…</code>, nebo chybí <code>SPAWN_start</code> nad zemí.</td></tr>
+<tr><td>Zmizela tráva po reimportu</td><td>Zkontroluj, že <code>data/scatter/grass.tres</code> má <code>auto_layer = G0</code> a že terén má plochy s materiálem G0.</td></tr>
+<tr><td>Změna v Blenderu není vidět</td><td>Znovu exportuj GLB; Godot objekt reimportuje po návratu do okna.</td></tr>
+<tr><td>Štětec nemaluje</td><td>Musí být vybraná vrstva detailů, zapnutý „Štětec aktivní“ a scéna musí obsahovat <code>Terrain</code>.</td></tr>
+<tr><td>Chyby v konzoli</td><td>Zkopíruj je a pošli – opravíme.</td></tr>
+</table>
+</html>
